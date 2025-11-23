@@ -17,20 +17,20 @@ A high-quality, memory-efficient Python CLI tool for processing multitrack audio
 
 1. Clone the repository:
    ```
-   git clone https://github.com/yourusername/channel-weaver.git
+   git clone https://github.com/cblack34/channel_weaver.git
    cd channel-weaver
    ```
 
 2. Install dependencies:
    ```
-   pip install typer pysoundfile numpy tqdm pydantic
+   uv sync
    ```
 
 ## Usage
 
 Run the script with:
 ```
-python channel_weaver.py <input_path> [options]
+uv run channel_weaver.py <input_path> [options]
 ```
 
 ### Options
