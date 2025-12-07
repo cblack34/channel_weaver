@@ -61,3 +61,7 @@ class BusChannelConflictError(ConfigError):
             f"Channel {ch} is used in a bus but configured to PROCESS or SKIP. Set its action to BUS or remove it from buses."
         )
         self.ch = ch
+
+
+class AudioProcessingError(Exception):
+    """Base class for audio processing errors during file operations."""

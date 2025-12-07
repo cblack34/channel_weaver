@@ -206,7 +206,7 @@ The code uses **deprecated `@validator` decorator** which should be `@field_vali
 ## Phase 3: Integration
 
 ### 3.1 Wire CLI to Core Processing Logic
-- [ ] **Update imports in main.py**: Import from new module structure:
+- [x] **Update imports in main.py**: Import from new module structure:
   ```python
   from src.models import (
       ChannelAction, BusSlot, BusType, BitDepth,
@@ -218,10 +218,10 @@ The code uses **deprecated `@validator` decorator** which should be `@field_vali
   from rich.console import Console
   ```
 
-- [ ] **Create shared Console instance**: Instantiate `Console()` once in `main()` for injection
+- [x] **Create shared Console instance**: Instantiate `Console()` once in `main()` for injection
 
 ### 3.2 Implement Processing Pipeline
-- [ ] **Replace placeholder with AudioExtractor initialization**:
+- [x] **Replace placeholder with AudioExtractor initialization**:
   ```python
   console = Console()
   extractor = AudioExtractor(
@@ -232,19 +232,19 @@ The code uses **deprecated `@validator` decorator** which should be `@field_vali
   )
   ```
 
-- [ ] **Discover and validate input files**: Call `extractor.discover_and_validate()`
+- [x] **Discover and validate input files**: Call `extractor.discover_and_validate()`
 
-- [ ] **Get detected channel count**: Store `extractor.channels` for ConfigLoader
+- [x] **Get detected channel count**: Store `extractor.channels` for ConfigLoader
 
-- [ ] **Replace main.py ConfigLoader usage**: Use m32_processor's ConfigLoader with `detected_channel_count`:
+- [x] **Replace main.py ConfigLoader usage**: Use m32_processor's ConfigLoader with `detected_channel_count`:
   ```python
   config_loader = ConfigLoader(CHANNELS, BUSES, detected_channel_count=extractor.channels)
   channels, buses = config_loader.load()
   ```
 
-- [ ] **Extract segments**: Call `segments = extractor.extract_segments(target_bit_depth=bit_depth)`
+- [x] **Extract segments**: Call `segments = extractor.extract_segments(target_bit_depth=bit_depth)`
 
-- [ ] **Build tracks with TrackBuilder**:
+- [x] **Build tracks with TrackBuilder**:
   ```python
   builder = TrackBuilder(
       sample_rate=extractor.sample_rate,
@@ -258,10 +258,10 @@ The code uses **deprecated `@validator` decorator** which should be `@field_vali
   builder.build_tracks(channels, buses, segments)
   ```
 
-- [ ] **Handle cleanup**: Call `extractor.cleanup()` after successful processing
+- [x] **Handle cleanup**: Call `extractor.cleanup()` after successful processing
 
 ### 3.3 Error Handling Integration
-- [ ] **Wrap processing in try/except**: Catch `ConfigError`, `AudioProcessingError`:
+- [x] **Wrap processing in try/except**: Catch `ConfigError`, `AudioProcessingError`:
   ```python
   try:
       # Processing pipeline here
@@ -274,10 +274,10 @@ The code uses **deprecated `@validator` decorator** which should be `@field_vali
           extractor.cleanup()
   ```
 
-- [ ] **Ensure cleanup on error**: Use `finally` block to clean temp files if error occurs (unless keep_temp)
+- [x] **Ensure cleanup on error**: Use `finally` block to clean temp files if error occurs (unless keep_temp)
 
 ### 3.4 CLI Alignment with PRD
-- [ ] **Update bit_depth default**: Change default from `BitDepth.FLOAT32` to `BitDepth.SOURCE`:
+- [x] **Update bit_depth default**: Change default from `BitDepth.FLOAT32` to `BitDepth.SOURCE`:
   ```python
   bit_depth: BitDepth = typer.Option(
       BitDepth.SOURCE,  # Changed from FLOAT32 per PRD
@@ -286,9 +286,9 @@ The code uses **deprecated `@validator` decorator** which should be `@field_vali
   )
   ```
 
-- [ ] **Add --version option**: Implement with eager callback (see Phase 1.3)
+- [x] **Add --version option**: Implement with eager callback (see Phase 1.3)
 
-- [ ] **Verify**: CLI `--help` shows all options matching PRD specification
+- [x] **Verify**: CLI `--help` shows all options matching PRD specification
 
 ---
 

@@ -11,8 +11,14 @@ from typing import Optional
 
 import typer
 
-from src.models import BitDepth, BusConfig, BusSlot, BusType, ChannelAction, ChannelConfig
+from src.models import (
+    ChannelAction, BusSlot, BusType, BitDepth,
+    ChannelConfig, BusConfig
+)
+from src.exceptions import ConfigError, AudioProcessingError
+from src.m32_processor import AudioExtractor, TrackBuilder, ConfigLoader
 from src.constants import VERSION
+from rich.console import Console
 
 
 # Channel definitions – list of dicts for easy editing and future config file support
@@ -100,7 +106,7 @@ def main(
         resolve_path=True,
         help="Override the default output directory",
     ),
-    bit_depth: BitDepth = typer.Option(BitDepth.FLOAT32, "--bit-depth", help="Target bit depth for output files"),
+    bit_depth: BitDepth = typer.Option(BitDepth.SOURCE, "--bit-depth", help="Target bit depth for output files (source=preserve original)"),
     temp_dir: Optional[Path] = typer.Option(None, "--temp-dir", file_okay=False, dir_okay=True, resolve_path=True, help="Custom temporary directory"),
     keep_temp: bool = typer.Option(False, "--keep-temp", help="Keep temporary files instead of deleting them"),
     version: bool = typer.Option(
@@ -113,23 +119,55 @@ def main(
 ) -> None:
     """Process multitrack recordings according to the provided configuration."""
 
+    console = Console()
+    
     normalized_input = _sanitize_path(input_path)
     output_dir = _ensure_output_path(normalized_input, output)
     temp_root = _determine_temp_dir(output_dir, temp_dir)
 
-    channels = [ChannelConfig(**channel_dict) for channel_dict in CHANNELS]
-    buses = [BusConfig(**bus_dict) for bus_dict in BUSES]
+    try:
+        # Initialize AudioExtractor
+        extractor = AudioExtractor(
+            input_dir=normalized_input,
+            temp_dir=temp_root,
+            keep_temp=keep_temp,
+            console=console,
+        )
 
-    typer.echo("Midas M32 multitrack processor")
-    typer.echo(f"Input directory: {normalized_input}")
-    typer.echo(f"Output directory: {output_dir}")
-    typer.echo(f"Temporary directory: {temp_root}")
-    typer.echo(f"Keep temporary files: {'yes' if keep_temp else 'no'}")
-    typer.echo(f"Selected bit depth: {bit_depth.value}")
-    typer.echo(f"Loaded {len(channels)} channel definitions and {len(buses)} bus definitions.")
+        # Discover and validate input files
+        extractor.discover_and_validate()
 
-    # Placeholder for future processing logic
-    typer.echo("Processing is not yet implemented in this scaffold.")
+        # Get detected channel count for ConfigLoader
+        detected_channel_count = extractor.channels
+
+        # Load and validate configuration
+        config_loader = ConfigLoader(CHANNELS, BUSES, detected_channel_count=detected_channel_count)
+        channels, buses = config_loader.load()
+
+        # Extract segments
+        segments = extractor.extract_segments(target_bit_depth=bit_depth)
+
+        # Build tracks
+        builder = TrackBuilder(
+            sample_rate=extractor.sample_rate,
+            bit_depth=bit_depth,
+            source_bit_depth=extractor.bit_depth,
+            temp_dir=temp_root,
+            output_dir=output_dir,
+            keep_temp=keep_temp,
+            console=console,
+        )
+        builder.build_tracks(channels, buses, segments)
+
+        # Handle cleanup
+        extractor.cleanup()
+        
+    except (ConfigError, AudioProcessingError) as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(code=1)
+    finally:
+        if not keep_temp and 'extractor' in locals():
+            extractor.cleanup()
 
 
 if __name__ == "__main__":
