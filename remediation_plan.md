@@ -343,7 +343,7 @@ The code uses **deprecated `@validator` decorator** which should be `@field_vali
 
 ### 4.2 Open-Closed Principle (OCP)
 
-- [ ] **Create `src/converters.py`**: Define abstract interface for bit depth operations:
+- [x] **Create `src/converters.py`**: Define abstract interface for bit depth operations:
   ```python
   """Bit depth conversion strategies."""
   from abc import ABC, abstractmethod
@@ -396,7 +396,10 @@ The code uses **deprecated `@validator` decorator** which should be `@field_vali
       return converters[bit_depth]
   ```
 
-- [ ] **Refactor `_soundfile_subtype()`, `_numpy_dtype()`, `_convert_dtype()`**: Replace with converter factory pattern
+- [x] **Refactor `_soundfile_subtype()`, `_numpy_dtype()`, `_convert_dtype()`**: Replace with converter factory pattern
+- [x] **Update TrackBuilder**: Use converter instance instead of bit_depth enum
+- [x] **Update AudioExtractor**: Use converter for segment creation
+- [x] **Remove old conversion functions**: Clean up unused code
 
 ### 4.3 Liskov Substitution Principle (LSP)
 

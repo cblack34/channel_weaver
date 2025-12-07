@@ -19,6 +19,7 @@ from tqdm import tqdm
 import logging
 
 from .validators import ChannelValidator, BusValidator
+from .converters import get_converter, BitDepthConverter
 
 from src.exceptions import *
 from src.models import *
@@ -111,46 +112,6 @@ def _sanitize_filename(name: str) -> str:
     trimmed = re.sub(r"\s+", " ", name).strip()
     safe = re.sub(r"[^A-Za-z0-9 _.-]", "_", trimmed)
     return safe or "track"
-
-
-def _soundfile_subtype(bit_depth: BitDepth) -> str:
-    """Map :class:`BitDepth` to a SoundFile subtype string."""
-
-    if bit_depth is BitDepth.SOURCE:
-        raise AudioProcessingError("Bit depth must be resolved before selecting a soundfile subtype.")
-    if bit_depth is BitDepth.INT24:
-        return "PCM_24"
-    if bit_depth is BitDepth.INT16:
-        return "PCM_16"
-    return "FLOAT"
-
-
-def _numpy_dtype(bit_depth: BitDepth) -> np.dtype:
-    """Return an appropriate NumPy dtype for the given bit depth."""
-
-    if bit_depth is BitDepth.SOURCE:
-        raise AudioProcessingError("Bit depth must be resolved before selecting a NumPy dtype.")
-    if bit_depth in {BitDepth.INT24, BitDepth.INT16}:
-        return np.int32 if bit_depth is BitDepth.INT24 else np.int16
-    return np.float32
-
-
-def _convert_dtype(data: np.ndarray, bit_depth: BitDepth) -> np.ndarray:
-    """Convert floating-point ``data`` to the specified bit depth."""
-
-    if bit_depth is BitDepth.SOURCE:
-        raise AudioProcessingError("Bit depth must be resolved before converting sample data.")
-
-    float_data = data.astype(np.float32, copy=False)
-    if bit_depth is BitDepth.INT24:
-        # Scale to 24-bit signed integer range: [-2^23, 2^23-1] = [-8388608, 8388607]
-        scaled = np.clip(np.rint(float_data * 8388608.0), -8388608, 8388607)
-        return scaled.astype(np.int32)
-    if bit_depth is BitDepth.INT16:
-        # Scale to 16-bit signed integer range: [-2^15, 2^15-1] = [-32768, 32767]
-        scaled = np.clip(np.rint(float_data * 32767.0), -32768, 32767)
-        return scaled.astype(np.int16)
-    return float_data
 
 
 def _resolve_bit_depth(requested: BitDepth, source: BitDepth | None) -> BitDepth:
@@ -283,7 +244,7 @@ class AudioExtractor:
         assert self.channels is not None
         requested_bit_depth = target_bit_depth or self.bit_depth or BitDepth.FLOAT32
         effective_bit_depth = _resolve_bit_depth(requested_bit_depth, self.bit_depth)
-        subtype = _soundfile_subtype(effective_bit_depth)
+        converter = get_converter(effective_bit_depth)
 
         self.temp_dir.mkdir(parents=True, exist_ok=True)
         segments: dict[int, list[Path]] = {ch: [] for ch in range(1, self.channels + 1)}
@@ -294,7 +255,7 @@ class AudioExtractor:
                 for ch in range(1, self.channels + 1):
                     segment_path = self.temp_dir / f"ch{ch:02d}_{index:04d}.wav"
                     writers[ch] = stack.enter_context(
-                        sf.SoundFile(segment_path, "w", samplerate=self.sample_rate, channels=1, subtype=subtype)
+                        sf.SoundFile(segment_path, "w", samplerate=self.sample_rate, channels=1, subtype=converter.soundfile_subtype)
                     )
                     segments[ch].append(segment_path)
 
@@ -310,11 +271,8 @@ class AudioExtractor:
                             if data.size == 0:
                                 break
                             for ch, writer in writers.items():
-                                if effective_bit_depth is BitDepth.FLOAT32:
-                                    writer.write(data[:, ch - 1])
-                                else:
-                                    mono = _convert_dtype(data[:, ch - 1], effective_bit_depth)
-                                    writer.write(mono)
+                                mono = converter.convert(data[:, ch - 1])
+                                writer.write(mono)
                             progress.update(len(data))
 
         self.console.print(
@@ -371,8 +329,9 @@ class TrackBuilder:
             console: Optional Rich console for formatted output. Creates a new console
                 if None is provided.
         """
+        resolved_bit_depth = _resolve_bit_depth(bit_depth, source_bit_depth)
+        self.converter = get_converter(resolved_bit_depth)
         self.sample_rate = sample_rate
-        self.bit_depth = _resolve_bit_depth(bit_depth, source_bit_depth)
         self.temp_dir = temp_dir
         self.output_dir = output_dir
         self.keep_temp = keep_temp
@@ -390,9 +349,6 @@ class TrackBuilder:
         self._write_buses(buses, segments)
 
     def _write_mono_tracks(self, channels: list[ChannelConfig], segments: dict[int, list[Path]]) -> None:
-        subtype = _soundfile_subtype(self.bit_depth)
-        writer_dtype = _numpy_dtype(self.bit_depth)
-
         for channel in tqdm(channels, desc="Writing mono tracks"):
             if channel.action is not ChannelAction.PROCESS:
                 continue
@@ -404,28 +360,21 @@ class TrackBuilder:
             filename = f"{channel.ch:02d}_{_sanitize_filename(channel.name)}.wav"
             output_path = self.output_dir / filename
 
-            with sf.SoundFile(output_path, "w", samplerate=self.sample_rate, channels=1, subtype=subtype) as dest:
+            with sf.SoundFile(output_path, "w", samplerate=self.sample_rate, channels=1, subtype=self.converter.soundfile_subtype) as dest:
                 for segment in ch_segments:
                     with sf.SoundFile(segment) as source:
                         while True:
                             data = source.read(_AUDIO_CHUNK_SIZE, dtype="float32", always_2d=True)
                             if data.size == 0:
                                 break
-                            if self.bit_depth is BitDepth.FLOAT32:
-                                dest.write(data[:, 0].astype(writer_dtype, copy=False))
-                            else:
-                                dest.write(
-                                    _convert_dtype(data[:, 0], self.bit_depth).astype(writer_dtype, copy=False)
-                                )
+                            converted_data = self.converter.convert(data[:, 0])
+                            dest.write(converted_data.astype(self.converter.numpy_dtype, copy=False))
 
             self.console.print(f"Created mono track [green]{output_path.name}[/green].")
 
     def _write_buses(self, buses: list[BusConfig], segments: dict[int, list[Path]]) -> None:
         if not buses:
             return
-
-        subtype = _soundfile_subtype(self.bit_depth)
-        writer_dtype = _numpy_dtype(self.bit_depth)
 
         for bus in tqdm(buses, desc="Writing stereo buses"):
             left_ch = bus.slots.get(BusSlot.LEFT)
@@ -441,7 +390,7 @@ class TrackBuilder:
                 )
 
             output_path = self.output_dir / f"{_sanitize_filename(bus.file_name)}.wav"
-            with sf.SoundFile(output_path, "w", samplerate=self.sample_rate, channels=2, subtype=subtype) as dest:
+            with sf.SoundFile(output_path, "w", samplerate=self.sample_rate, channels=2, subtype=self.converter.soundfile_subtype) as dest:
                 for left_path, right_path in zip(left_segments, right_segments):
                     with sf.SoundFile(left_path) as left_file, sf.SoundFile(right_path) as right_file:
                         while True:
@@ -458,9 +407,7 @@ class TrackBuilder:
                                     f"Bus {bus.file_name} audio chunk mismatch: left chunk has {len(left_data)} samples, right chunk has {len(right_data)} samples."
                                 )
                             stereo = np.column_stack((left_data[:, 0], right_data[:, 0]))
-                            if self.bit_depth is BitDepth.FLOAT32:
-                                dest.write(stereo.astype(writer_dtype, copy=False))
-                            else:
-                                dest.write(_convert_dtype(stereo, self.bit_depth).astype(writer_dtype, copy=False))
+                            converted_stereo = self.converter.convert(stereo)
+                            dest.write(converted_stereo.astype(self.converter.numpy_dtype, copy=False))
 
             self.console.print(f"Created stereo bus [cyan]{output_path.name}[/cyan].")

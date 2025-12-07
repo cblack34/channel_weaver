@@ -57,6 +57,12 @@ applyTo: "**"
 - **Version Constraints**: Pin to compatible versions in `pyproject.toml`
 - **Import Efficiency**: Import only what's needed, avoid wildcard imports
 
+## Python Execution
+- **Use uv for Python execution**: Always use `uv run python` or `uv run python -m` instead of direct `python` calls
+- **Module execution**: Use `uv run python -m src.main` for running the main module
+- **Script execution**: Use `uv run python script.py` for running standalone scripts
+- **Virtual environment**: uv automatically manages the virtual environment, no manual activation needed
+
 ## Documentation
 - **README**: Keep updated with correct commands and usage examples
 - **PRD Compliance**: Ensure all features match Product Requirements Document
