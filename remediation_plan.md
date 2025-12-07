@@ -21,7 +21,7 @@ Each phase builds on the previous, ensuring foundational issues are resolved bef
 ### 1.1 Pydantic v2 Migration ⚠️ BREAKING CHANGE
 The code uses **deprecated `@validator` decorator** which should be `@field_validator` in Pydantic v2.
 
-- [ ] **Migrate `@validator` to `@field_validator` in ChannelConfig**:
+- [x] **Migrate `@validator` to `@field_validator` in ChannelConfig**:
   ```python
   # OLD (deprecated):
   @validator("action")
@@ -37,7 +37,7 @@ The code uses **deprecated `@validator` decorator** which should be `@field_vali
       return value
   ```
 
-- [ ] **Migrate `@validator` to `@field_validator` in BusConfig**:
+- [x] **Migrate `@validator` to `@field_validator` in BusConfig**:
   ```python
   # OLD (deprecated):
   @validator("slots")
@@ -58,9 +58,9 @@ The code uses **deprecated `@validator` decorator** which should be `@field_vali
       return self
   ```
 
-- [ ] **Update imports**: Replace `from pydantic import validator` with `from pydantic import field_validator, model_validator`
+- [x] **Update imports**: Replace `from pydantic import validator` with `from pydantic import field_validator, model_validator`
 
-- [ ] **Remove unused pydantic-settings**: Delete from `pyproject.toml` as it's not used in the codebase
+- [x] **Remove unused pydantic-settings**: Delete from `pyproject.toml` as it's not used in the codebase
 
 ### 1.2 Package Structure
 - [ ] **Create `src/__init__.py`**: Make `src/` a proper Python package for clean imports

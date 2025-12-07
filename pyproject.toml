@@ -6,7 +6,6 @@ requires-python = ">=3.14"
 dependencies = [
     "numpy>=2.3.5",
     "pydantic>=2.12.4",
-    "pydantic-settings>=2.12.0",
     "pysoundfile>=0.9.0.post1",
     "rich>=14.2.0",
     "tqdm>=4.67.1",

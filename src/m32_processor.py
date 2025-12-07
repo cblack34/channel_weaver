@@ -11,7 +11,7 @@ from enum import Enum, auto
 from pathlib import Path
 import re
 import shutil
-from typing import Iterable, Optional
+from typing import Iterable, Optional, Self
 
 import numpy as np
 import soundfile as sf
@@ -19,7 +19,7 @@ from rich.console import Console
 from tqdm import tqdm
 import warnings
 
-from pydantic import BaseModel, Field, ValidationError, validator
+from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 
 class ConfigError(Exception):
@@ -129,7 +129,8 @@ class ChannelConfig(BaseModel):
     name: str
     action: ChannelAction = ChannelAction.PROCESS
 
-    @validator("action")
+    @field_validator("action")
+    @classmethod
     def validate_action(cls, value: ChannelAction) -> ChannelAction:  # noqa: B902
         return value
 
@@ -141,15 +142,13 @@ class BusConfig(BaseModel):
     type: BusType = BusType.STEREO
     slots: dict[BusSlot, int] = Field(..., description="Slot to channel mapping")
 
-    @validator("slots")
-    def validate_slots(cls, value: dict[BusSlot, int], values: dict[str, object]) -> dict[BusSlot, int]:  # noqa: B902
-        bus_type = values.get("type", BusType.STEREO)
-        if isinstance(bus_type, BusType):
-            required = bus_type.required_slots()
-            if set(value.keys()) != required:
-                required_slots = ", ".join(slot.name for slot in sorted(required, key=lambda s: s.name))
-                raise ValueError(f"{bus_type.name} buses require slots: {required_slots}")
-        return value
+    @model_validator(mode='after')
+    def validate_slots(self) -> Self:  # noqa: B902
+        required = self.type.required_slots()
+        if set(self.slots.keys()) != required:
+            required_slots = ", ".join(slot.name for slot in sorted(required, key=lambda s: s.name))
+            raise ValueError(f"{self.type.name} buses require slots: {required_slots}")
+        return self
 
 
 class ConfigLoader:
