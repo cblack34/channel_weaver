@@ -251,11 +251,15 @@ class AudioProcessingError(ConfigError):
     """Raised when audio files cannot be processed safely."""
 
 
+_AUDIO_CHUNK_SIZE = 131072  # frames processed per read operation
+
+
 def _sanitize_filename(name: str) -> str:
     """Return a filesystem-safe version of ``name``.
 
     Leading/trailing whitespace is trimmed, internal whitespace is collapsed, and any
-    character outside of ``[A-Za-z0-9 _.-]`` is replaced with an underscore.
+    character outside of ``[A-Za-z0-9 _.-]`` is replaced with an underscore. Returns
+    ``"track"`` if the sanitized result would otherwise be empty.
     """
 
     trimmed = re.sub(r"\s+", " ", name).strip()
@@ -293,9 +297,11 @@ def _convert_dtype(data: np.ndarray, bit_depth: BitDepth) -> np.ndarray:
 
     float_data = data.astype(np.float32, copy=False)
     if bit_depth is BitDepth.INT24:
+        # Scale to 24-bit signed integer range: [-2^23, 2^23-1] = [-8388608, 8388607]
         scaled = np.clip(np.rint(float_data * 8388608.0), -8388608, 8388607)
         return scaled.astype(np.int32)
     if bit_depth is BitDepth.INT16:
+        # Scale to 16-bit signed integer range: [-2^15, 2^15-1] = [-32768, 32767]
         scaled = np.clip(np.rint(float_data * 32767.0), -32768, 32767)
         return scaled.astype(np.int16)
     return float_data
@@ -329,7 +335,13 @@ def _bit_depth_from_subtype(subtype: str) -> BitDepth:
 
 
 class AudioExtractor:
-    """Discover WAV files and split multichannel content into mono segments."""
+    """Discover WAV files and split multichannel content into mono segments.
+
+    This class handles the discovery of sequential WAV files in an input directory,
+    validates consistent audio parameters (sample rate, channel count, bit depth),
+    and splits multichannel audio into individual mono channel segments stored in a
+    temporary directory for later processing.
+    """
 
     def __init__(
         self,
@@ -350,7 +362,11 @@ class AudioExtractor:
         self._files: list[Path] = []
 
     def discover_and_validate(self) -> list[Path]:
-        """Find sequential WAV files and validate shared audio parameters."""
+        """Find sequential WAV files and validate shared audio parameters.
+
+        Returns:
+            list[Path]: A list of validated WAV file paths, sorted sequentially.
+        """
 
         self._files = self._discover_files()
         if not self._files:
@@ -404,7 +420,15 @@ class AudioExtractor:
         )
 
     def extract_segments(self, target_bit_depth: BitDepth | None = None) -> dict[int, list[Path]]:
-        """Split each input file into per-channel mono files in ``temp_dir``."""
+        """
+        Split each input file into per-channel mono files in ``temp_dir``.
+
+        Args:
+            target_bit_depth (BitDepth | None): The desired bit depth for output files.
+                If None, uses the source bit depth.
+        Returns:
+            dict[int, list[Path]]: Temporary segment paths keyed by channel number.
+        """
 
         if not self._files:
             self.discover_and_validate()
@@ -436,12 +460,15 @@ class AudioExtractor:
                         leave=False,
                     ) as progress:
                         while True:
-                            data = source.read(131072, dtype="float32", always_2d=True)
-                            if not len(data):
+                            data = source.read(_AUDIO_CHUNK_SIZE, dtype="float32", always_2d=True)
+                            if data.size == 0:
                                 break
                             for ch, writer in writers.items():
-                                mono = _convert_dtype(data[:, ch - 1], effective_bit_depth)
-                                writer.write(mono)
+                                if effective_bit_depth is BitDepth.FLOAT32:
+                                    writer.write(data[:, ch - 1])
+                                else:
+                                    mono = _convert_dtype(data[:, ch - 1], effective_bit_depth)
+                                    writer.write(mono)
                             progress.update(len(data))
 
         self.console.print(
@@ -450,7 +477,12 @@ class AudioExtractor:
         return segments
 
     def cleanup(self) -> None:
-        """Delete temporary files unless ``keep_temp`` was requested."""
+        """
+        Delete temporary files unless ``keep_temp`` was requested.
+
+        Removes the entire temporary directory tree if it exists and ``keep_temp`` is
+        False, printing whether cleanup was performed or skipped.
+        """
 
         if self.keep_temp:
             self.console.print("Skipping temp cleanup (keep-temp enabled).")
@@ -461,7 +493,13 @@ class AudioExtractor:
 
 
 class TrackBuilder:
-    """Concatenate channel segments and construct mono or stereo bus tracks."""
+    """Concatenate channel segments and construct mono or stereo bus tracks.
+
+    This class concatenates the mono channel segments produced by :class:`AudioExtractor`
+    into final output tracks. It supports individual mono channel tracks and stereo bus
+    tracks that combine left/right channels, applying filename sanitization and optional
+    bit-depth conversion for the outputs.
+    """
 
     def __init__(
         self,
@@ -474,6 +512,19 @@ class TrackBuilder:
         keep_temp: bool = False,
         console: Optional[Console] = None,
     ) -> None:
+        """Initialize the track builder.
+
+        Args:
+            sample_rate: Audio sample rate in Hz.
+            bit_depth: Target bit depth for output files.
+            source_bit_depth: Original bit depth of the source audio (used to resolve
+                :data:`BitDepth.SOURCE`).
+            temp_dir: Directory containing temporary segment files.
+            output_dir: Directory for final output track files.
+            keep_temp: If True, preserves temporary files after processing.
+            console: Optional Rich console for formatted output. Creates a new console
+                if None is provided.
+        """
         self.sample_rate = sample_rate
         self.bit_depth = _resolve_bit_depth(bit_depth, source_bit_depth)
         self.temp_dir = temp_dir
@@ -514,10 +565,15 @@ class TrackBuilder:
                 for segment in ch_segments:
                     with sf.SoundFile(segment) as source:
                         while True:
-                            data = source.read(131072, dtype="float32", always_2d=True)
-                            if not len(data):
+                            data = source.read(_AUDIO_CHUNK_SIZE, dtype="float32", always_2d=True)
+                            if data.size == 0:
                                 break
-                            dest.write(_convert_dtype(data[:, 0], self.bit_depth).astype(writer_dtype, copy=False))
+                            if self.bit_depth is BitDepth.FLOAT32:
+                                dest.write(data[:, 0].astype(writer_dtype, copy=False))
+                            else:
+                                dest.write(
+                                    _convert_dtype(data[:, 0], self.bit_depth).astype(writer_dtype, copy=False)
+                                )
 
             self.console.print(f"Created mono track [green]{output_path.name}[/green].")
 
@@ -546,15 +602,22 @@ class TrackBuilder:
                 for left_path, right_path in zip(left_segments, right_segments):
                     with sf.SoundFile(left_path) as left_file, sf.SoundFile(right_path) as right_file:
                         while True:
-                            left_data = left_file.read(131072, dtype="float32", always_2d=True)
-                            right_data = right_file.read(131072, dtype="float32", always_2d=True)
-                            if not len(left_data) or not len(right_data):
+                            left_data = left_file.read(_AUDIO_CHUNK_SIZE, dtype="float32", always_2d=True)
+                            right_data = right_file.read(_AUDIO_CHUNK_SIZE, dtype="float32", always_2d=True)
+                            if len(left_data) == 0 and len(right_data) == 0:
                                 break
+                            if len(left_data) == 0 or len(right_data) == 0:
+                                raise AudioProcessingError(
+                                    f"Bus {bus.file_name} segment length mismatch: one channel ended prematurely"
+                                )
                             if len(left_data) != len(right_data):
                                 raise AudioProcessingError(
                                     f"Bus {bus.file_name} audio chunk mismatch: left chunk has {len(left_data)} samples, right chunk has {len(right_data)} samples."
                                 )
                             stereo = np.column_stack((left_data[:, 0], right_data[:, 0]))
-                            dest.write(_convert_dtype(stereo, self.bit_depth).astype(writer_dtype, copy=False))
+                            if self.bit_depth is BitDepth.FLOAT32:
+                                dest.write(stereo.astype(writer_dtype, copy=False))
+                            else:
+                                dest.write(_convert_dtype(stereo, self.bit_depth).astype(writer_dtype, copy=False))
 
             self.console.print(f"Created stereo bus [cyan]{output_path.name}[/cyan].")
