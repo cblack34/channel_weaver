@@ -21,6 +21,7 @@ import logging
 from .validators import ChannelValidator, BusValidator
 from .converters import get_converter, BitDepthConverter
 from .protocols import OutputHandler, ConsoleOutputHandler
+from .types import SegmentMap, ChannelData, BusData
 
 from src.exceptions import *
 from src.models import *
@@ -34,8 +35,8 @@ class ConfigLoader:
 
     def __init__(
         self,
-        channels_data: Iterable[dict[str, object]],
-        buses_data: Iterable[dict[str, object]],
+        channels_data: Iterable[ChannelData],
+        buses_data: Iterable[BusData],
         *,
         detected_channel_count: int | None = None,
         channel_validator: ChannelValidator | None = None,
@@ -237,7 +238,7 @@ class AudioExtractor:
             f"Input audio: [bold]{self.channels}[/bold] channels @ [bold]{self.sample_rate} Hz[/bold], bit depth [bold]{self.bit_depth.value}[/bold]."
         )
 
-    def extract_segments(self, target_bit_depth: BitDepth | None = None) -> dict[int, list[Path]]:
+    def extract_segments(self, target_bit_depth: BitDepth | None = None) -> SegmentMap:
         """
         Split each input file into per-channel mono files in ``temp_dir``.
 
@@ -258,38 +259,68 @@ class AudioExtractor:
         converter = get_converter(effective_bit_depth)
 
         self.temp_dir.mkdir(parents=True, exist_ok=True)
-        segments: dict[int, list[Path]] = {ch: [] for ch in range(1, self.channels + 1)}
+        segments: SegmentMap = {ch: [] for ch in range(1, self.channels + 1)}
 
         for index, path in enumerate(tqdm(self._files, desc="Extracting channels", unit="file"), start=1):
-            with ExitStack() as stack:
-                writers: dict[int, sf.SoundFile] = {}
-                for ch in range(1, self.channels + 1):
-                    segment_path = self.temp_dir / f"ch{ch:02d}_{index:04d}.wav"
-                    writers[ch] = stack.enter_context(
-                        sf.SoundFile(segment_path, "w", samplerate=self.sample_rate, channels=1, subtype=converter.soundfile_subtype)
-                    )
-                    segments[ch].append(segment_path)
+            self._process_file_segments(path, index, segments, converter)
 
-                with sf.SoundFile(path) as source:
-                    with tqdm(
-                        total=len(source),
-                        desc=f"{path.name}",
-                        unit="frame",
-                        leave=False,
-                    ) as progress:
-                        while True:
-                            data = source.read(_AUDIO_CHUNK_SIZE, dtype="float32", always_2d=True)
-                            if data.size == 0:
-                                break
-                            for ch, writer in writers.items():
-                                mono = converter.convert(data[:, ch - 1])
-                                writer.write(mono)
-                            progress.update(len(data))
-
-        self.console.print(
-            f"Wrote mono segments to [bold]{self.temp_dir}[/bold] using bit depth [bold]{effective_bit_depth.value}[/bold]."
+        self._output_handler.info(
+            f"Wrote mono segments to {self.temp_dir} using bit depth {effective_bit_depth.value}."
         )
         return segments
+
+    def _process_file_segments(
+        self,
+        path: Path,
+        index: int,
+        segments: SegmentMap,
+        converter: BitDepthConverter,
+    ) -> None:
+        """Process a single file into per-channel segments."""
+        with ExitStack() as stack:
+            writers = self._create_segment_writers(path, index, segments, converter, stack)
+            self._process_file_chunks(path, writers, converter)
+
+    def _create_segment_writers(
+        self,
+        path: Path,
+        index: int,
+        segments: SegmentMap,
+        converter: BitDepthConverter,
+        stack: ExitStack,
+    ) -> dict[int, sf.SoundFile]:
+        """Create SoundFile writers for each channel segment."""
+        writers: dict[int, sf.SoundFile] = {}
+        for ch in range(1, self.channels + 1):
+            segment_path = self.temp_dir / f"ch{ch:02d}_{index:04d}.wav"
+            writers[ch] = stack.enter_context(
+                sf.SoundFile(segment_path, "w", samplerate=self.sample_rate, channels=1, subtype=converter.soundfile_subtype)
+            )
+            segments[ch].append(segment_path)
+        return writers
+
+    def _process_file_chunks(
+        self,
+        path: Path,
+        writers: dict[int, sf.SoundFile],
+        converter: BitDepthConverter,
+    ) -> None:
+        """Process audio file in chunks, writing to segment files."""
+        with sf.SoundFile(path) as source:
+            with tqdm(
+                total=len(source),
+                desc=f"{path.name}",
+                unit="frame",
+                leave=False,
+            ) as progress:
+                while True:
+                    data = source.read(_AUDIO_CHUNK_SIZE, dtype="float32", always_2d=True)
+                    if data.size == 0:
+                        break
+                    for ch, writer in writers.items():
+                        mono = converter.convert(data[:, ch - 1])
+                        writer.write(mono)
+                    progress.update(len(data))
 
     def cleanup(self) -> None:
         """
@@ -358,12 +389,12 @@ class TrackBuilder:
         self,
         channels: list[ChannelConfig],
         buses: list[BusConfig],
-        segments: dict[int, list[Path]],
+        segments: SegmentMap,
     ) -> None:
         self._write_mono_tracks(channels, segments)
         self._write_buses(buses, segments)
 
-    def _write_mono_tracks(self, channels: list[ChannelConfig], segments: dict[int, list[Path]]) -> None:
+    def _write_mono_tracks(self, channels: list[ChannelConfig], segments: SegmentMap) -> None:
         for channel in tqdm(channels, desc="Writing mono tracks"):
             if channel.action is not ChannelAction.PROCESS:
                 continue
@@ -387,42 +418,55 @@ class TrackBuilder:
 
             self.console.print(f"Created mono track [green]{output_path.name}[/green].")
 
-    def _write_buses(self, buses: list[BusConfig], segments: dict[int, list[Path]]) -> None:
+    def _write_buses(self, buses: list[BusConfig], segments: SegmentMap) -> None:
         if not buses:
             return
 
         for bus in tqdm(buses, desc="Writing stereo buses"):
-            left_ch = bus.slots.get(BusSlot.LEFT)
-            right_ch = bus.slots.get(BusSlot.RIGHT)
-            if left_ch is None or right_ch is None:
-                raise AudioProcessingError(f"Bus {bus.file_name} is missing LEFT or RIGHT channel assignments.")
-
-            left_segments = segments.get(left_ch, [])
-            right_segments = segments.get(right_ch, [])
-            if len(left_segments) != len(right_segments):
-                raise AudioProcessingError(
-                    f"Bus {bus.file_name} segment mismatch: {len(left_segments)} left vs {len(right_segments)} right files."
-                )
-
+            self._validate_bus_segments(bus, segments)
             output_path = self.output_dir / f"{_sanitize_filename(bus.file_name)}.wav"
-            with sf.SoundFile(output_path, "w", samplerate=self.sample_rate, channels=2, subtype=self.converter.soundfile_subtype) as dest:
-                for left_path, right_path in zip(left_segments, right_segments):
-                    with sf.SoundFile(left_path) as left_file, sf.SoundFile(right_path) as right_file:
-                        while True:
-                            left_data = left_file.read(_AUDIO_CHUNK_SIZE, dtype="float32", always_2d=True)
-                            right_data = right_file.read(_AUDIO_CHUNK_SIZE, dtype="float32", always_2d=True)
-                            if len(left_data) == 0 and len(right_data) == 0:
-                                break
-                            if len(left_data) == 0 or len(right_data) == 0:
-                                raise AudioProcessingError(
-                                    f"Bus {bus.file_name} segment length mismatch: one channel ended prematurely"
-                                )
-                            if len(left_data) != len(right_data):
-                                raise AudioProcessingError(
-                                    f"Bus {bus.file_name} audio chunk mismatch: left chunk has {len(left_data)} samples, right chunk has {len(right_data)} samples."
-                                )
-                            stereo = np.column_stack((left_data[:, 0], right_data[:, 0]))
-                            converted_stereo = self.converter.convert(stereo)
-                            dest.write(converted_stereo.astype(self.converter.numpy_dtype, copy=False))
+            self._write_stereo_file(bus, segments, output_path)
+            self._output_handler.info(f"Created stereo bus {output_path.name}.")
 
-            self.console.print(f"Created stereo bus [cyan]{output_path.name}[/cyan].")
+    def _validate_bus_segments(self, bus: BusConfig, segments: SegmentMap) -> tuple[int, int, list[Path], list[Path]]:
+        """Validate bus configuration and return segment information."""
+        left_ch = bus.slots.get(BusSlot.LEFT)
+        right_ch = bus.slots.get(BusSlot.RIGHT)
+        if left_ch is None or right_ch is None:
+            raise AudioProcessingError(f"Bus {bus.file_name} is missing LEFT or RIGHT channel assignments.")
+
+        left_segments = segments.get(left_ch, [])
+        right_segments = segments.get(right_ch, [])
+        if len(left_segments) != len(right_segments):
+            raise AudioProcessingError(
+                f"Bus {bus.file_name} segment mismatch: {len(left_segments)} left vs {len(right_segments)} right files."
+            )
+        return left_ch, right_ch, left_segments, right_segments
+
+    def _write_stereo_file(self, bus: BusConfig, segments: SegmentMap, output_path: Path) -> None:
+        """Write stereo bus file by interleaving left and right channels."""
+        left_ch, right_ch, left_segments, right_segments = self._validate_bus_segments(bus, segments)
+        
+        with sf.SoundFile(output_path, "w", samplerate=self.sample_rate, channels=2, subtype=self.converter.soundfile_subtype) as dest:
+            for left_path, right_path in zip(left_segments, right_segments):
+                self._write_stereo_segments(dest, left_path, right_path, bus)
+
+    def _write_stereo_segments(self, dest: sf.SoundFile, left_path: Path, right_path: Path, bus: BusConfig) -> None:
+        """Write stereo segments from left and right files to destination."""
+        with sf.SoundFile(left_path) as left_file, sf.SoundFile(right_path) as right_file:
+            while True:
+                left_data = left_file.read(_AUDIO_CHUNK_SIZE, dtype="float32", always_2d=True)
+                right_data = right_file.read(_AUDIO_CHUNK_SIZE, dtype="float32", always_2d=True)
+                if len(left_data) == 0 and len(right_data) == 0:
+                    break
+                if len(left_data) == 0 or len(right_data) == 0:
+                    raise AudioProcessingError(
+                        f"Bus {bus.file_name} segment length mismatch: one channel ended prematurely"
+                    )
+                if len(left_data) != len(right_data):
+                    raise AudioProcessingError(
+                        f"Bus {bus.file_name} audio chunk mismatch: left chunk has {len(left_data)} samples, right chunk has {len(right_data)} samples."
+                    )
+                stereo = np.column_stack((left_data[:, 0], right_data[:, 0]))
+                converted_stereo = self.converter.convert(stereo)
+                dest.write(converted_stereo.astype(self.converter.numpy_dtype, copy=False))

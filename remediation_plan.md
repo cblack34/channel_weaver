@@ -438,7 +438,7 @@ The code uses **deprecated `@validator` decorator** which should be `@field_vali
 
 ### 4.6 Code Smells
 
-- [ ] **Extract type aliases** in `src/types.py`:
+- [x] **Extract type aliases** in `src/types.py`:
   ```python
   """Type aliases for Channel Weaver."""
   from pathlib import Path
@@ -449,23 +449,23 @@ The code uses **deprecated `@validator` decorator** which should be `@field_vali
   BusData: TypeAlias = dict[str, object]
   ```
 
-- [ ] **Break down long methods**:
+- [x] **Break down long methods**:
   - Split `AudioExtractor.extract_segments()`:
+    - `_process_file_segments()`
     - `_create_segment_writers()`
     - `_process_file_chunks()`
-    - `_finalize_segments()`
   - Split `TrackBuilder._write_buses()`:
     - `_validate_bus_segments()`
-    - `_interleave_stereo()`
     - `_write_stereo_file()`
+    - `_write_stereo_segments()`
 
-- [ ] **Standardize naming**: Document convention: `ch` for short variable names within methods, `channel` for function parameters and class attributes
+- [x] **Standardize naming**: Document convention: `ch` for short variable names within methods, `channel` for function parameters and class attributes
 
-- [ ] **Remove dead imports**: Audit and remove unused imports:
-  - `warnings` (if migrated to logging)
+- [x] **Remove dead imports**: Audit and remove unused imports:
+  - `warnings` (not present in codebase)
   - Check `ExitStack` usage in m32_processor.py (currently used ✓)
 
-- [ ] **Fix inconsistent method naming**: Standardize to `_load_*` for private, `load_*` for public
+- [x] **Fix inconsistent method naming**: All methods follow `_load_*` for private convention
 
 ---
 
