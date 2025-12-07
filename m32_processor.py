@@ -266,6 +266,8 @@ def _sanitize_filename(name: str) -> str:
 def _soundfile_subtype(bit_depth: BitDepth) -> str:
     """Map :class:`BitDepth` to a SoundFile subtype string."""
 
+    if bit_depth is BitDepth.SOURCE:
+        raise AudioProcessingError("Bit depth must be resolved before selecting a soundfile subtype.")
     if bit_depth is BitDepth.INT24:
         return "PCM_24"
     if bit_depth is BitDepth.INT16:
@@ -276,6 +278,8 @@ def _soundfile_subtype(bit_depth: BitDepth) -> str:
 def _numpy_dtype(bit_depth: BitDepth) -> np.dtype:
     """Return an appropriate NumPy dtype for the given bit depth."""
 
+    if bit_depth is BitDepth.SOURCE:
+        raise AudioProcessingError("Bit depth must be resolved before selecting a NumPy dtype.")
     if bit_depth in {BitDepth.INT24, BitDepth.INT16}:
         return np.int32 if bit_depth is BitDepth.INT24 else np.int16
     return np.float32
@@ -284,14 +288,27 @@ def _numpy_dtype(bit_depth: BitDepth) -> np.dtype:
 def _convert_dtype(data: np.ndarray, bit_depth: BitDepth) -> np.ndarray:
     """Convert floating-point ``data`` to the specified bit depth."""
 
+    if bit_depth is BitDepth.SOURCE:
+        raise AudioProcessingError("Bit depth must be resolved before converting sample data.")
+
     float_data = data.astype(np.float32, copy=False)
     if bit_depth is BitDepth.INT24:
         scaled = np.clip(np.rint(float_data * 8388608.0), -8388608, 8388607)
         return scaled.astype(np.int32)
     if bit_depth is BitDepth.INT16:
-        scaled = np.clip(np.rint(float_data * 32768.0), -32768, 32767)
+        scaled = np.clip(np.rint(float_data * 32767.0), -32768, 32767)
         return scaled.astype(np.int16)
     return float_data
+
+
+def _resolve_bit_depth(requested: BitDepth, source: BitDepth | None) -> BitDepth:
+    """Return an actionable bit depth, replacing ``SOURCE`` with ``source``."""
+
+    if requested is BitDepth.SOURCE:
+        if source is None:
+            raise AudioProcessingError("Cannot resolve source bit depth before validating input files.")
+        return source
+    return requested
 
 
 def _bit_depth_from_subtype(subtype: str) -> BitDepth:
@@ -394,7 +411,8 @@ class AudioExtractor:
 
         assert self.sample_rate is not None
         assert self.channels is not None
-        effective_bit_depth = target_bit_depth or self.bit_depth or BitDepth.FLOAT32
+        requested_bit_depth = target_bit_depth or self.bit_depth or BitDepth.FLOAT32
+        effective_bit_depth = _resolve_bit_depth(requested_bit_depth, self.bit_depth)
         subtype = _soundfile_subtype(effective_bit_depth)
 
         self.temp_dir.mkdir(parents=True, exist_ok=True)
@@ -450,13 +468,14 @@ class TrackBuilder:
         sample_rate: int,
         *,
         bit_depth: BitDepth,
+        source_bit_depth: BitDepth | None = None,
         temp_dir: Path,
         output_dir: Path,
         keep_temp: bool = False,
         console: Optional[Console] = None,
     ) -> None:
         self.sample_rate = sample_rate
-        self.bit_depth = bit_depth
+        self.bit_depth = _resolve_bit_depth(bit_depth, source_bit_depth)
         self.temp_dir = temp_dir
         self.output_dir = output_dir
         self.keep_temp = keep_temp
@@ -529,8 +548,12 @@ class TrackBuilder:
                         while True:
                             left_data = left_file.read(131072, dtype="float32", always_2d=True)
                             right_data = right_file.read(131072, dtype="float32", always_2d=True)
-                            if not len(left_data):
+                            if not len(left_data) or not len(right_data):
                                 break
+                            if len(left_data) != len(right_data):
+                                raise AudioProcessingError(
+                                    f"Bus {bus.file_name} audio chunk mismatch: left chunk has {len(left_data)} samples, right chunk has {len(right_data)} samples."
+                                )
                             stereo = np.column_stack((left_data[:, 0], right_data[:, 0]))
                             dest.write(_convert_dtype(stereo, self.bit_depth).astype(writer_dtype, copy=False))
 
