@@ -136,18 +136,18 @@ The code uses **deprecated `@validator` decorator** which should be `@field_vali
 ## Phase 2: Preparation & Bug Fixes
 
 ### 2.1 Dependency Issues
-- [ ] **Verify Rich dependency**: Confirm `rich>=14.2.0` is in `pyproject.toml` ✓ (added via `uv add rich`)
-- [ ] **Remove unused dependency**: Delete `pydantic-settings` from `pyproject.toml`
-- [ ] **Verify**: Run `uv sync` and confirm no import errors in all modules
+- [x] **Verify Rich dependency**: Confirm `rich>=14.2.0` is in `pyproject.toml` ✓ (added via `uv add rich`)
+- [x] **Remove unused dependency**: Delete `pydantic-settings` from `pyproject.toml`
+- [x] **Verify**: Run `uv sync` and confirm no import errors in all modules
 
 ### 2.2 Remove Code Duplication (Prerequisite for Integration)
-- [ ] **Delete duplicate definitions from main.py**: Remove `ChannelAction`, `BusSlot`, `BusType`, `BitDepth`, `ChannelConfig`, `BusConfig`, and simplified `ConfigLoader` classes
-- [ ] **Add imports from src.models**: Import all shared types and classes from the new `models.py`
-- [ ] **Sync BitDepth enum**: Ensure `main.py` uses `BitDepth` from `models.py` which includes `SOURCE` value
-- [ ] **Verify**: All files compile without import errors
+- [x] **Delete duplicate definitions from main.py**: Remove `ChannelAction`, `BusSlot`, `BusType`, `BitDepth`, `ChannelConfig`, `BusConfig`, and simplified `ConfigLoader` classes
+- [x] **Add imports from src.models**: Import all shared types and classes from the new `models.py`
+- [x] **Sync BitDepth enum**: Ensure `main.py` uses `BitDepth` from `models.py` which includes `SOURCE` value
+- [x] **Verify**: All files compile without import errors
 
 ### 2.3 Logic and Validation Bugs
-- [ ] **Fix _sort_key edge case**: Modify `AudioExtractor._sort_key()` to return `(float('inf'), path.name)` for non-numeric filenames:
+- [x] **Fix _sort_key edge case**: Modify `AudioExtractor._sort_key()` to return `(float('inf'), path.name)` for non-numeric filenames:
   ```python
   def _sort_key(self, path: Path) -> tuple[int | float, str]:
       match = re.search(r"(\d+)", path.stem)
@@ -156,7 +156,7 @@ The code uses **deprecated `@validator` decorator** which should be `@field_vali
       return float('inf'), path.name  # Non-numeric files sort last
   ```
 
-- [ ] **Fix double cleanup risk**: Remove temp cleanup from `TrackBuilder.build_tracks()`:
+- [x] **Fix double cleanup risk**: Remove temp cleanup from `TrackBuilder.build_tracks()`:
   ```python
   def build_tracks(self, channels, buses, segments) -> None:
       self._write_mono_tracks(channels, segments)
@@ -165,7 +165,7 @@ The code uses **deprecated `@validator` decorator** which should be `@field_vali
       # Cleanup is handled by AudioExtractor.cleanup()
   ```
 
-- [ ] **Improve channel auto-creation warnings**: Use `logging.warning()` instead of `warnings.warn()`:
+- [x] **Improve channel auto-creation warnings**: Use `logging.warning()` instead of `warnings.warn()`:
   ```python
   import logging
   logger = logging.getLogger(__name__)

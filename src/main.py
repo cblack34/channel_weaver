@@ -7,12 +7,12 @@ paths for downstream processing.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Optional
 
 import typer
 
-from .models import BitDepth, BusConfig, BusSlot, BusType, ChannelAction, ChannelConfig
-from .constants import VERSION
+from src.models import BitDepth, BusConfig, BusSlot, BusType, ChannelAction, ChannelConfig
+from src.constants import VERSION
 
 
 # Channel definitions – list of dicts for easy editing and future config file support
@@ -45,24 +45,6 @@ def _sanitize_path(path: Path) -> Path:
     """Return a normalized, absolute version of ``path``."""
 
     return path.expanduser().resolve()
-
-
-class ConfigLoader:
-    """Load and validate user-editable channel and bus definitions."""
-
-    def __init__(self, channels_data: Iterable[dict[str, object]], buses_data: Iterable[dict[str, object]]) -> None:
-        self._channels_data = list(channels_data)
-        self._buses_data = list(buses_data)
-
-    def load_channels(self) -> list[ChannelConfig]:
-        """Create channel config models from raw data."""
-
-        return [ChannelConfig(**channel_dict) for channel_dict in self._channels_data]
-
-    def load_buses(self) -> list[BusConfig]:
-        """Create bus config models from raw data."""
-
-        return [BusConfig(**bus_dict) for bus_dict in self._buses_data]
 
 
 def _default_output_dir(input_path: Path) -> Path:
@@ -135,9 +117,8 @@ def main(
     output_dir = _ensure_output_path(normalized_input, output)
     temp_root = _determine_temp_dir(output_dir, temp_dir)
 
-    config_loader = ConfigLoader(CHANNELS, BUSES)
-    channels = config_loader.load_channels()
-    buses = config_loader.load_buses()
+    channels = [ChannelConfig(**channel_dict) for channel_dict in CHANNELS]
+    buses = [BusConfig(**bus_dict) for bus_dict in BUSES]
 
     typer.echo("Midas M32 multitrack processor")
     typer.echo(f"Input directory: {normalized_input}")

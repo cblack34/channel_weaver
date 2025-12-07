@@ -16,10 +16,13 @@ import numpy as np
 import soundfile as sf
 from rich.console import Console
 from tqdm import tqdm
-import warnings
+import logging
 
-from .exceptions import *
-from .models import *
+from src.exceptions import *
+from src.models import *
+
+
+logger = logging.getLogger(__name__)
 
 
 class ConfigLoader:
@@ -100,18 +103,12 @@ class ConfigLoader:
 
         for ch in bus_channels:
             if ch not in channels_by_number:
-                warnings.warn(
-                    f"Auto-creating channel {ch:02d} for bus assignment with action=BUS.",
-                    stacklevel=2,
-                )
+                logger.warning("Auto-creating channel %02d for bus assignment with action=BUS.", ch)
                 channels_by_number[ch] = ChannelConfig(ch=ch, name=f"Ch {ch:02d}", action=ChannelAction.BUS)
 
         for ch in range(1, self._detected_channels + 1):
             if ch not in channels_by_number:
-                warnings.warn(
-                    f"Auto-creating missing channel {ch:02d} with action=PROCESS.",
-                    stacklevel=2,
-                )
+                logger.warning("Auto-creating missing channel %02d with action=PROCESS.", ch)
                 channels_by_number[ch] = ChannelConfig(ch=ch, name=f"Ch {ch:02d}")
 
         return sorted(channels_by_number.values(), key=lambda config: config.ch)
@@ -252,11 +249,11 @@ class AudioExtractor:
         self.console.print(f"Discovered {len(sorted_files)} input files in [bold]{self.input_dir}[/bold].")
         return sorted_files
 
-    def _sort_key(self, path: Path) -> tuple[int, str]:
+    def _sort_key(self, path: Path) -> tuple[int | float, str]:
         match = re.search(r"(\d+)", path.stem)
         if match:
             return int(match.group(1)), path.name
-        return 0, path.name
+        return float('inf'), path.name
 
     def _validate_audio_consistency(self, files: list[Path]) -> None:
         expected_rate: int | None = None
@@ -412,9 +409,6 @@ class TrackBuilder:
     ) -> None:
         self._write_mono_tracks(channels, segments)
         self._write_buses(buses, segments)
-        if not self.keep_temp and self.temp_dir.exists():
-            shutil.rmtree(self.temp_dir)
-            self.console.print(f"Cleaned up temporary directory {self.temp_dir}.")
 
     def _write_mono_tracks(self, channels: list[ChannelConfig], segments: dict[int, list[Path]]) -> None:
         subtype = _soundfile_subtype(self.bit_depth)
