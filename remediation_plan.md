@@ -102,6 +102,19 @@ The code uses **deprecated `@validator` decorator** which should be `@field_vali
   VERSION: str = "0.1.0"
   ```
 
+- [x] **Create `.copilot-instructions.md`**: Set up persistent development guidelines for Copilot
+  ```markdown
+  ---
+  applyTo: "**"
+  ---
+  # Channel Weaver Development Guidelines
+  
+  ## Import Standards
+  - **ALWAYS use absolute imports** from the `src` package
+  - **NEVER use relative imports**
+  // ... comprehensive guidelines
+  ```
+
 ### 1.3 Typer API Corrections
 - [x] **Fix version callback signature**: Add `is_eager=True` for proper ordering
   ```python
@@ -296,7 +309,7 @@ The code uses **deprecated `@validator` decorator** which should be `@field_vali
 
 ### 4.1 Single Responsibility Principle (SRP)
 
-- [ ] **Create `src/validators.py`**: Extract validation logic to dedicated module:
+- [x] **Create `src/validators.py`**: Extract validation logic to dedicated module:
   ```python
   """Validation utilities for Channel Weaver configuration."""
   from .models import ChannelConfig, BusConfig, ChannelAction
@@ -320,7 +333,7 @@ The code uses **deprecated `@validator` decorator** which should be `@field_vali
       ...
   ```
 
-- [ ] **Refactor ConfigLoader**: Keep as orchestrator calling validators:
+- [x] **Refactor ConfigLoader**: Keep as orchestrator calling validators:
   ```python
   class ConfigLoader:
       def __init__(self, ..., channel_validator: ChannelValidator | None = None):

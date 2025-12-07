@@ -18,6 +18,8 @@ from rich.console import Console
 from tqdm import tqdm
 import logging
 
+from .validators import ChannelValidator, BusValidator
+
 from src.exceptions import *
 from src.models import *
 
@@ -38,6 +40,8 @@ class ConfigLoader:
         self._channels_data = list(channels_data)
         self._buses_data = list(buses_data)
         self._detected_channels = detected_channel_count
+        self._channel_validator = ChannelValidator(detected_channel_count)
+        self._bus_validator = BusValidator(detected_channel_count)
 
     def load(self) -> tuple[list[ChannelConfig], list[BusConfig]]:
         """Return validated channel and bus configurations."""
@@ -45,10 +49,10 @@ class ConfigLoader:
         channels = self._load_channels()
         buses = self._load_buses()
 
-        self._validate_channel_numbers(channels)
+        self._channel_validator.validate(channels)
         bus_channels = self._collect_bus_channels(buses)
-        self._validate_bus_channels(bus_channels)
-        self._ensure_no_bus_conflicts(channels, bus_channels)
+        self._bus_validator.validate_channels(bus_channels)
+        self._bus_validator.validate_no_conflicts(channels, bus_channels)
 
         completed_channels = self._complete_channel_list(channels, bus_channels)
         return completed_channels, buses
@@ -65,36 +69,11 @@ class ConfigLoader:
         except ValidationError as exc:  # pragma: no cover - defensive
             raise ConfigValidationError("Invalid bus configuration.", errors=exc) from exc
 
-    def _validate_channel_numbers(self, channels: list[ChannelConfig]) -> None:
-        seen: set[int] = set()
-        for channel in channels:
-            if channel.ch in seen:
-                raise DuplicateChannelError(channel.ch)
-            seen.add(channel.ch)
-            if channel.ch > self._detected_channels:
-                raise ChannelOutOfRangeError(channel.ch, self._detected_channels)
-
     def _collect_bus_channels(self, buses: list[BusConfig]) -> list[int]:
         channels: list[int] = []
         for bus in buses:
             channels.extend(bus.slots.values())
         return channels
-
-    def _validate_bus_channels(self, bus_channels: list[int]) -> None:
-        seen: set[int] = set()
-        for ch in bus_channels:
-            if ch > self._detected_channels:
-                raise BusSlotOutOfRangeError(ch, self._detected_channels)
-            if ch in seen:
-                raise BusSlotDuplicateError(ch)
-            seen.add(ch)
-
-    def _ensure_no_bus_conflicts(self, channels: list[ChannelConfig], bus_channels: list[int]) -> None:
-        channels_by_number = {channel.ch: channel for channel in channels}
-        for ch in bus_channels:
-            channel = channels_by_number.get(ch)
-            if channel is not None and channel.action is not ChannelAction.BUS:
-                raise BusChannelConflictError(ch)
 
     def _complete_channel_list(
         self, channels: list[ChannelConfig], bus_channels: list[int]
