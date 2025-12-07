@@ -419,11 +419,11 @@ The code uses **deprecated `@validator` decorator** which should be `@field_vali
 
 ### 4.4 Interface Segregation Principle (ISP)
 
-- [ ] **Keep TrackBuilder unified**: After analysis, `build_tracks` always writes both mono and stereo, so splitting adds complexity without benefit. Mark as intentional design decision.
+- [x] **Keep TrackBuilder unified**: After analysis, `build_tracks` always writes both mono and stereo, so splitting adds complexity without benefit. Mark as intentional design decision.
 
 ### 4.5 Dependency Inversion Principle (DIP)
 
-- [ ] **Define OutputHandler protocol** (optional, for testability):
+- [x] **Define OutputHandler protocol** (optional, for testability):
   ```python
   from typing import Protocol
   
@@ -434,7 +434,7 @@ The code uses **deprecated `@validator` decorator** which should be `@field_vali
       def error(self, message: str) -> None: ...
   ```
 
-- [ ] **Inject validators into ConfigLoader**: Pass validator instances instead of creating internally
+- [x] **Inject validators into ConfigLoader**: Pass validator instances instead of creating internally
 
 ### 4.6 Code Smells
 

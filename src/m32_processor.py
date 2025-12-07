@@ -20,6 +20,7 @@ import logging
 
 from .validators import ChannelValidator, BusValidator
 from .converters import get_converter, BitDepthConverter
+from .protocols import OutputHandler, ConsoleOutputHandler
 
 from src.exceptions import *
 from src.models import *
@@ -36,13 +37,20 @@ class ConfigLoader:
         channels_data: Iterable[dict[str, object]],
         buses_data: Iterable[dict[str, object]],
         *,
-        detected_channel_count: int,
+        detected_channel_count: int | None = None,
+        channel_validator: ChannelValidator | None = None,
+        bus_validator: BusValidator | None = None,
     ) -> None:
         self._channels_data = list(channels_data)
         self._buses_data = list(buses_data)
         self._detected_channels = detected_channel_count
-        self._channel_validator = ChannelValidator(detected_channel_count)
-        self._bus_validator = BusValidator(detected_channel_count)
+        # Use injected validators or create defaults
+        self._channel_validator = channel_validator or (
+            ChannelValidator(detected_channel_count) if detected_channel_count is not None else None
+        )
+        self._bus_validator = bus_validator or (
+            BusValidator(detected_channel_count) if detected_channel_count is not None else None
+        )
 
     def load(self) -> tuple[list[ChannelConfig], list[BusConfig]]:
         """Return validated channel and bus configurations."""
@@ -157,11 +165,14 @@ class AudioExtractor:
         *,
         keep_temp: bool = False,
         console: Optional[Console] = None,
+        output_handler: OutputHandler | None = None,
     ) -> None:
         self.input_dir = input_dir
         self.temp_dir = temp_dir
         self.keep_temp = keep_temp
-        self.console = console or Console()
+        # Use injected output handler or create default
+        self._output_handler = output_handler or ConsoleOutputHandler(console)
+        self.console = self._output_handler  # Backward compatibility
 
         self.sample_rate: int | None = None
         self.bit_depth: BitDepth | None = None
@@ -315,6 +326,7 @@ class TrackBuilder:
         output_dir: Path,
         keep_temp: bool = False,
         console: Optional[Console] = None,
+        output_handler: OutputHandler | None = None,
     ) -> None:
         """Initialize the track builder.
 
@@ -328,6 +340,7 @@ class TrackBuilder:
             keep_temp: If True, preserves temporary files after processing.
             console: Optional Rich console for formatted output. Creates a new console
                 if None is provided.
+            output_handler: Optional output handler for dependency injection.
         """
         resolved_bit_depth = _resolve_bit_depth(bit_depth, source_bit_depth)
         self.converter = get_converter(resolved_bit_depth)
@@ -335,7 +348,9 @@ class TrackBuilder:
         self.temp_dir = temp_dir
         self.output_dir = output_dir
         self.keep_temp = keep_temp
-        self.console = console or Console()
+        # Use injected output handler or create default
+        self._output_handler = output_handler or ConsoleOutputHandler(console)
+        self.console = self._output_handler  # Backward compatibility
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
