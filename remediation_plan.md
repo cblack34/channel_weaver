@@ -403,7 +403,7 @@ The code uses **deprecated `@validator` decorator** which should be `@field_vali
 
 ### 4.3 Liskov Substitution Principle (LSP)
 
-- [ ] **Verify exception hierarchy**: All custom exceptions properly inherit from `ConfigError`:
+- [x] **Verify exception hierarchy**: All custom exceptions properly inherit from `ConfigError`:
   ```
   ConfigError (base)
   ├── ConfigValidationError
@@ -415,7 +415,7 @@ The code uses **deprecated `@validator` decorator** which should be `@field_vali
   └── AudioProcessingError
   ```
 
-- [ ] **Add docstrings to exceptions**: Document when each exception is raised
+- [x] **Add docstrings to exceptions**: Document when each exception is raised
 
 ### 4.4 Interface Segregation Principle (ISP)
 

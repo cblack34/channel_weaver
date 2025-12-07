@@ -4,11 +4,20 @@ from pydantic import ValidationError
 
 
 class ConfigError(Exception):
-    """Base class for user-facing configuration errors."""
+    """Base class for user-facing configuration errors.
+
+    All configuration-related exceptions inherit from this class to ensure
+    consistent error handling and user messaging throughout the application.
+    """
 
 
 class ConfigValidationError(ConfigError):
-    """Raised when Pydantic validation fails for user data."""
+    """Raised when Pydantic validation fails for user data.
+
+    This exception is raised when user-provided channel or bus configurations
+    fail validation due to incorrect data types, missing required fields,
+    or constraint violations defined in the Pydantic models.
+    """
 
     def __init__(self, message: str, *, errors: ValidationError | None = None) -> None:
         super().__init__(message)
@@ -16,7 +25,12 @@ class ConfigValidationError(ConfigError):
 
 
 class DuplicateChannelError(ConfigError):
-    """Raised when channel numbers are defined more than once."""
+    """Raised when channel numbers are defined more than once.
+
+    This exception is raised during configuration loading when the same
+    channel number appears multiple times in the user-defined channel list,
+    violating the requirement for unique channel numbers.
+    """
 
     def __init__(self, ch: int) -> None:
         super().__init__(f"Channel {ch} is defined multiple times; channel numbers must be unique.")
@@ -24,7 +38,12 @@ class DuplicateChannelError(ConfigError):
 
 
 class ChannelOutOfRangeError(ConfigError):
-    """Raised when a channel number exceeds the detected channel count."""
+    """Raised when a channel number exceeds the detected channel count.
+
+    This exception is raised when a user-defined channel configuration
+    references a channel number that is higher than the number of channels
+    detected in the input audio files.
+    """
 
     def __init__(self, ch: int, detected: int) -> None:
         super().__init__(
@@ -35,7 +54,12 @@ class ChannelOutOfRangeError(ConfigError):
 
 
 class BusSlotOutOfRangeError(ConfigError):
-    """Raised when a bus slot references a channel beyond the detected count."""
+    """Raised when a bus slot references a channel beyond the detected count.
+
+    This exception is raised when a bus configuration assigns a channel
+    number to a bus slot that exceeds the number of channels available
+    in the input audio files.
+    """
 
     def __init__(self, ch: int, detected: int) -> None:
         super().__init__(
@@ -46,7 +70,12 @@ class BusSlotOutOfRangeError(ConfigError):
 
 
 class BusSlotDuplicateError(ConfigError):
-    """Raised when the same channel is assigned to multiple bus slots."""
+    """Raised when the same channel is assigned to multiple bus slots.
+
+    This exception is raised when multiple bus slots in the same bus
+    configuration reference the same channel number, which would cause
+    audio routing conflicts.
+    """
 
     def __init__(self, ch: int) -> None:
         super().__init__(f"Channel {ch} is assigned to multiple bus slots; each slot must use a unique channel.")
@@ -54,7 +83,12 @@ class BusSlotDuplicateError(ConfigError):
 
 
 class BusChannelConflictError(ConfigError):
-    """Raised when a bus-assigned channel is also marked for processing or skipping."""
+    """Raised when a bus-assigned channel is also marked for processing or skipping.
+
+    This exception is raised when a channel is assigned to a bus slot but
+    is also configured with an action of PROCESS or SKIP, creating a conflict
+    in how the channel should be handled.
+    """
 
     def __init__(self, ch: int) -> None:
         super().__init__(
@@ -63,5 +97,12 @@ class BusChannelConflictError(ConfigError):
         self.ch = ch
 
 
-class AudioProcessingError(Exception):
-    """Base class for audio processing errors during file operations."""
+class AudioProcessingError(ConfigError):
+    """Raised when audio file operations fail during processing.
+
+    This exception is raised for issues such as:
+    - Missing or corrupted WAV files
+    - Inconsistent audio parameters across files
+    - File system errors during reading/writing
+    - Unsupported audio formats or parameters
+    """
