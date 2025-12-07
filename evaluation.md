@@ -5,15 +5,34 @@ This evaluation assesses the completeness of the Channel Weaver repository again
 
 The repository contains core functionality in `m32_processor.py` but lacks integration in the main entry point (`main.py`). Several bugs, missing dependencies, and code quality issues exist.
 
-## Completeness Score: 70%
-- **Core Processing Logic**: 90% - AudioExtractor and TrackBuilder classes fully implement channel extraction, concatenation, and bus creation as specified.
-- **Configuration Handling**: 80% - ConfigLoader validates and auto-completes configurations, but duplicated and inconsistent across files.
+**Note (Updated)**: Additional analysis via library API validation (Context7 MCP) revealed critical deprecation issues with Pydantic v2 API usage and missing package structure elements.
+
+## Completeness Score: 65% (Revised from 70%)
+- **Core Processing Logic**: 85% (reduced from 90%) - AudioExtractor and TrackBuilder classes implement channel extraction, concatenation, and bus creation, but uses deprecated Pydantic v2 API.
+- **Configuration Handling**: 75% (reduced from 80%) - ConfigLoader validates and auto-completes configurations, but duplicated across files and uses deprecated validators.
 - **CLI Integration**: 20% - Main CLI exists but processing is placeholder; not wired to core logic.
-- **Dependencies & Setup**: 60% - Pyproject.toml lists most dependencies, but missing Rich library used in code.
+- **Dependencies & Setup**: 70% (increased from 60%) - Rich dependency now added; `pydantic-settings` still unused.
+- **Package Structure**: 40% - Missing `src/__init__.py` for proper package; no `__main__.py` for module execution.
 - **Documentation**: 70% - README provides usage info, but references incorrect filenames and tools (uv instead of pip).
 - **Testing & Validation**: 0% - No tests present.
 
 ## Bugs and Issues
+
+### Critical API Deprecation Issues (NEW - Found via Library Validation)
+- [ ] **Pydantic v2 Deprecated API**: `m32_processor.py` uses deprecated `@validator` decorator (lines ~115 and ~133). Must migrate to `@field_validator` with `@classmethod` decorator per Pydantic v2 requirements. This will cause deprecation warnings and may break in future Pydantic versions.
+  ```python
+  # Current (deprecated):
+  @validator("action")
+  def validate_action(cls, value):
+  
+  # Required (Pydantic v2):
+  @field_validator("action")
+  @classmethod
+  def validate_action(cls, value: ChannelAction) -> ChannelAction:
+  ```
+
+### Package Structure Issues (NEW)
+- [ ] **Missing `src/__init__.py`**: The `src/` directory lacks `__init__.py`, making it not a proper Python package. This affects imports and may cause issues with `python -m src.main`.
 
 ### Critical Integration Issues
 - [ ] **Main.py Processing Placeholder**: The `main()` function in `main.py` contains placeholder code ("Processing is not yet implemented") instead of integrating AudioExtractor, TrackBuilder, and ConfigLoader from `m32_processor.py`.
