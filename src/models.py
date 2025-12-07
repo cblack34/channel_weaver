@@ -68,6 +68,11 @@ class BusConfig(BaseModel):
 
     @model_validator(mode='after')
     def validate_slots(self) -> Self:  # noqa: B902
+        # Validate slot channel numbers are positive
+        for slot, ch in self.slots.items():
+            if ch < 1:
+                raise ValueError(f"Slot {slot.name} channel must be >= 1, got {ch}")
+        # Validate required slots
         required = self.type.required_slots()
         if set(self.slots.keys()) != required:
             required_slots = ", ".join(slot.name for slot in sorted(required, key=lambda s: s.name))

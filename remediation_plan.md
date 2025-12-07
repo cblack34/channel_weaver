@@ -177,7 +177,7 @@ The code uses **deprecated `@validator` decorator** which should be `@field_vali
   ```
 
 ### 2.4 Configuration and Validation Issues
-- [ ] **Add slot value validation in BusConfig**: Validate all slot values are `>= 1`:
+- [x] **Add slot value validation in BusConfig**: Validate all slot values are `>= 1`:
   ```python
   @model_validator(mode='after')
   def validate_slots(self) -> Self:
