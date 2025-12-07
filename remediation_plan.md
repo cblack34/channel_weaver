@@ -114,6 +114,7 @@ The code uses **deprecated `@validator` decorator** which should be `@field_vali
   - **NEVER use relative imports**
   // ... comprehensive guidelines
   ```
+  **Location**: `.github/copilot-instructions.md` (moved from workspace root per VS Code documentation)
 
 ### 1.3 Typer API Corrections
 - [x] **Fix version callback signature**: Add `is_eager=True` for proper ordering
