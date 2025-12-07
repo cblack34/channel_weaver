@@ -63,13 +63,13 @@ The code uses **deprecated `@validator` decorator** which should be `@field_vali
 - [x] **Remove unused pydantic-settings**: Delete from `pyproject.toml` as it's not used in the codebase
 
 ### 1.2 Package Structure
-- [ ] **Create `src/__init__.py`**: Make `src/` a proper Python package for clean imports
+- [x] **Create `src/__init__.py`**: Make `src/` a proper Python package for clean imports
   ```python
   """Channel Weaver - Midas M32 multitrack processor."""
   __version__ = "0.1.0"
   ```
 
-- [ ] **Create `src/exceptions.py`**: Extract all custom exceptions to dedicated module for reusability
+- [x] **Create `src/exceptions.py`**: Extract all custom exceptions to dedicated module for reusability
   ```python
   """Custom exceptions for Channel Weaver."""
   
@@ -81,7 +81,7 @@ The code uses **deprecated `@validator` decorator** which should be `@field_vali
   # ... etc
   ```
 
-- [ ] **Create `src/models.py`**: Extract all Pydantic models and enums
+- [x] **Create `src/models.py`**: Extract all Pydantic models and enums
   ```python
   """Data models for Channel Weaver configuration."""
   from enum import Enum, auto
@@ -95,7 +95,7 @@ The code uses **deprecated `@validator` decorator** which should be `@field_vali
   class BusConfig(BaseModel): ...
   ```
 
-- [ ] **Create `src/constants.py`**: Centralize magic numbers
+- [x] **Create `src/constants.py`**: Centralize magic numbers
   ```python
   """Constants for Channel Weaver."""
   AUDIO_CHUNK_SIZE: int = 131_072  # frames per read operation
@@ -103,7 +103,7 @@ The code uses **deprecated `@validator` decorator** which should be `@field_vali
   ```
 
 ### 1.3 Typer API Corrections
-- [ ] **Fix version callback signature**: Add `is_eager=True` for proper ordering
+- [x] **Fix version callback signature**: Add `is_eager=True` for proper ordering
   ```python
   def version_callback(value: bool) -> None:
       if value:
@@ -121,12 +121,12 @@ The code uses **deprecated `@validator` decorator** which should be `@field_vali
   ```
 
 ### 1.4 Verify Library API Usage
-- [ ] **PySoundFile API**: Confirmed correct usage of:
+- [x] **PySoundFile API**: Confirmed correct usage of:
   - `sf.SoundFile` context manager with `'w'`, `'r'`, `'r+'` modes ✓
   - `sf.info()` for metadata extraction ✓
   - `subtype` parameter: `'PCM_24'`, `'PCM_16'`, `'FLOAT'` ✓
   
-- [ ] **NumPy API**: Confirmed correct usage of:
+- [x] **NumPy API**: Confirmed correct usage of:
   - `astype(dtype, copy=False)` for efficient type conversion ✓
   - `np.clip()` for value clamping ✓
   - `np.column_stack()` for stereo interleaving ✓
