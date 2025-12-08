@@ -233,6 +233,15 @@ class AudioExtractor:
             console: Rich console for output (optional, uses default if None)
             output_handler: Custom output handler (optional, uses console if None)
         """
+        self.input_dir = input_dir
+        self.temp_dir = temp_dir
+        self.keep_temp = keep_temp
+        self.console = console or Console()
+        self._output_handler = output_handler or ConsoleOutputHandler(self.console)
+        self._files: list[Path] | None = None
+        self.sample_rate: int | None = None
+        self.channels: int | None = None
+        self.bit_depth: BitDepth | None = None
 
     def discover_and_validate(self) -> list[Path]:
         """Find sequential WAV files and validate shared audio parameters.
@@ -254,6 +263,9 @@ class AudioExtractor:
         Returns:
             Sorted list of WAV file paths, ordered by numeric sequence in filename
         """
+        wav_files = list(self.input_dir.glob("*.wav"))
+        wav_files.sort(key=self._sort_key)
+        return wav_files
 
     def _sort_key(self, path: Path) -> tuple[int | float, str]:
         """Generate sort key for WAV files based on numeric sequence.
@@ -264,6 +276,14 @@ class AudioExtractor:
         Returns:
             Tuple of (numeric_value, filename) for sorting WAV files in sequence
         """
+        filename = path.stem
+        # Find the first sequence of digits
+        match = re.search(r'\d+', filename)
+        if match:
+            num = int(match.group())
+        else:
+            num = float('inf')  # Put files without numbers at the end
+        return (num, filename)
 
     def _validate_audio_consistency(self, files: list[Path]) -> None:
         """Validate that all WAV files have consistent audio parameters.
