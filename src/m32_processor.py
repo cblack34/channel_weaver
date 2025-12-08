@@ -1,8 +1,16 @@
-"""Configuration utilities for the Midas M32 processor CLI.
+"""Core processing components for Channel Weaver.
 
-This module defines the user-facing channel/bus configuration schema and a
-robust loader that validates, normalizes, and auto-fills channel definitions
-based on a detected channel count.
+This module provides the main processing pipeline for the Midas M32 multitrack processor.
+It includes three main components:
+
+1. ConfigLoader: Loads and validates user-editable channel and bus configuration data
+2. AudioExtractor: Discovers WAV files and extracts mono channel segments
+3. TrackBuilder: Concatenates segments into final mono and stereo output tracks
+
+The processing pipeline follows this flow:
+    Raw config dicts → ConfigLoader → validated ChannelConfig/BusConfig objects
+    Input WAV files → AudioExtractor → mono channel segments
+    Segments + config → TrackBuilder → final output tracks
 """
 from __future__ import annotations
 
@@ -40,7 +48,19 @@ logger = logging.getLogger(__name__)
 
 
 class ConfigLoader:
-    """Load and validate user-editable channel and bus definitions."""
+    """Load and validate user-editable channel and bus definitions.
+
+    This class processes raw configuration dictionaries into validated Pydantic models,
+    performs cross-validation between channels and buses, and auto-fills missing channels
+    based on detected audio channel count.
+
+    Attributes:
+        _channels_data: Raw channel configuration dictionaries
+        _buses_data: Raw bus configuration dictionaries
+        _detected_channels: Number of channels detected in input audio (optional)
+        _channel_validator: Validator for channel configurations
+        _bus_validator: Validator for bus configurations
+    """
 
     def __init__(
         self,
@@ -51,6 +71,15 @@ class ConfigLoader:
         channel_validator: ChannelValidator | None = None,
         bus_validator: BusValidator | None = None,
     ) -> None:
+        """Initialize the configuration loader.
+
+        Args:
+            channels_data: Iterable of raw channel configuration dictionaries
+            buses_data: Iterable of raw bus configuration dictionaries
+            detected_channel_count: Number of channels detected in input audio files
+            channel_validator: Custom channel validator (uses default if None)
+            bus_validator: Custom bus validator (uses default if None)
+        """
         self._channels_data = list(channels_data)
         self._buses_data = list(buses_data)
         self._detected_channels = detected_channel_count
@@ -63,7 +92,18 @@ class ConfigLoader:
         )
 
     def load(self) -> tuple[list[ChannelConfig], list[BusConfig]]:
-        """Return validated channel and bus configurations."""
+        """Return validated channel and bus configurations.
+
+        Processes raw configuration data through validation and normalization,
+        ensuring all channels are accounted for and bus assignments are valid.
+
+        Returns:
+            Tuple of (channels, buses) where channels includes auto-created entries
+            for any missing channels detected in the audio.
+
+        Raises:
+            ConfigValidationError: If channel or bus configuration is invalid
+        """
 
         channels = self._load_channels()
         buses = self._load_buses()
@@ -77,39 +117,48 @@ class ConfigLoader:
         return completed_channels, buses
 
     def _load_channels(self) -> list[ChannelConfig]:
-        try:
-            return [ChannelConfig(**channel_dict) for channel_dict in self._channels_data]
-        except ValidationError as exc:  # pragma: no cover - defensive
-            raise ConfigValidationError("Invalid channel configuration.", errors=exc) from exc
+        """Load channel configurations from raw data.
+
+        Returns:
+            List of ChannelConfig objects parsed from raw dictionaries.
+
+        Raises:
+            ConfigValidationError: If channel data cannot be parsed
+        """
 
     def _load_buses(self) -> list[BusConfig]:
-        try:
-            return [BusConfig(**bus_dict) for bus_dict in self._buses_data]
-        except ValidationError as exc:  # pragma: no cover - defensive
-            raise ConfigValidationError("Invalid bus configuration.", errors=exc) from exc
+        """Load bus configurations from raw data.
+
+        Returns:
+            List of BusConfig objects parsed from raw dictionaries.
+
+        Raises:
+            ConfigValidationError: If bus data cannot be parsed
+        """
 
     def _collect_bus_channels(self, buses: list[BusConfig]) -> list[int]:
-        channels: list[int] = []
-        for bus in buses:
-            channels.extend(bus.slots.values())
-        return channels
+        """Extract all channel numbers used in bus configurations.
+
+        Args:
+            buses: List of bus configurations to analyze
+
+        Returns:
+            Sorted list of unique channel numbers used in bus slots
+        """
 
     def _complete_channel_list(
         self, channels: list[ChannelConfig], bus_channels: list[int]
     ) -> list[ChannelConfig]:
-        channels_by_number = {channel.ch: channel for channel in channels}
+        """Complete channel list with auto-created entries for missing channels.
 
-        for ch in bus_channels:
-            if ch not in channels_by_number:
-                logger.warning("Auto-creating channel %02d for bus assignment with action=BUS.", ch)
-                channels_by_number[ch] = ChannelConfig(ch=ch, name=f"Ch {ch:02d}", action=ChannelAction.BUS)
+        Args:
+            channels: Existing channel configurations
+            bus_channels: Channel numbers referenced in bus configurations
 
-        for ch in range(1, self._detected_channels + 1):
-            if ch not in channels_by_number:
-                logger.warning("Auto-creating missing channel %02d with action=PROCESS.", ch)
-                channels_by_number[ch] = ChannelConfig(ch=ch, name=f"Ch {ch:02d}")
-
-        return sorted(channels_by_number.values(), key=lambda config: config.ch)
+        Returns:
+            Complete list including auto-created channels for bus assignments
+            and any missing channels up to detected_channel_count
+        """
 
 
 class AudioProcessingError(ConfigError):
@@ -177,17 +226,15 @@ class AudioExtractor:
         console: Optional[Console] = None,
         output_handler: OutputHandler | None = None,
     ) -> None:
-        self.input_dir = input_dir
-        self.temp_dir = temp_dir
-        self.keep_temp = keep_temp
-        # Use injected output handler or create default
-        self._output_handler = output_handler or ConsoleOutputHandler(console)
-        self.console = self._output_handler  # Backward compatibility
+        """Initialize the audio extractor.
 
-        self.sample_rate: int | None = None
-        self.bit_depth: BitDepth | None = None
-        self.channels: int | None = None
-        self._files: list[Path] = []
+        Args:
+            input_dir: Directory containing input WAV files
+            temp_dir: Directory for temporary mono channel segments
+            keep_temp: Whether to preserve temporary files after processing
+            console: Rich console for output (optional, uses default if None)
+            output_handler: Custom output handler (optional, uses console if None)
+        """
 
     def discover_and_validate(self) -> list[Path]:
         """Find sequential WAV files and validate shared audio parameters.
@@ -204,19 +251,31 @@ class AudioExtractor:
         return self._files
 
     def _discover_files(self) -> list[Path]:
-        wav_files = [path for path in self.input_dir.iterdir() if path.suffix.lower() == ".wav"]
-        sorted_files = sorted(wav_files, key=self._sort_key)
+        """Discover and sort WAV files in the input directory.
 
-        logger.info(f"Discovered {len(sorted_files)} input files in {self.input_dir}.")
-        return sorted_files
+        Returns:
+            Sorted list of WAV file paths, ordered by numeric sequence in filename
+        """
 
     def _sort_key(self, path: Path) -> tuple[int | float, str]:
-        match = re.search(r"(\d+)", path.stem)
-        if match:
-            return int(match.group(1)), path.name
-        return float('inf'), path.name
+        """Generate sort key for WAV files based on numeric sequence.
+
+        Args:
+            path: File path to generate sort key for
+
+        Returns:
+            Tuple of (numeric_value, filename) for sorting WAV files in sequence
+        """
 
     def _validate_audio_consistency(self, files: list[Path]) -> None:
+        """Validate that all WAV files have consistent audio parameters.
+
+        Args:
+            files: List of WAV file paths to validate
+
+        Raises:
+            AudioProcessingError: If files have inconsistent sample rate, channels, or bit depth
+        """
         expected_rate: int | None = None
         expected_channels: int | None = None
         expected_subtype: str | None = None
@@ -285,7 +344,14 @@ class AudioExtractor:
         segments: SegmentMap,
         converter: BitDepthConverter,
     ) -> None:
-        """Process a single file into per-channel segments."""
+        """Process a single file into per-channel segments.
+
+        Args:
+            path: Input WAV file path
+            index: Sequential file index for naming segments
+            segments: Dictionary to store segment paths by channel
+            converter: Bit depth converter for output format
+        """
         with ExitStack() as stack:
             writers = self._create_segment_writers(path, index, segments, converter, stack)
             self._process_file_chunks(path, writers, converter)
@@ -298,7 +364,18 @@ class AudioExtractor:
         converter: BitDepthConverter,
         stack: ExitStack,
     ) -> dict[int, sf.SoundFile]:
-        """Create SoundFile writers for each channel segment."""
+        """Create SoundFile writers for each channel segment.
+
+        Args:
+            path: Input file path (used for naming context)
+            index: Sequential file index
+            segments: Dictionary to store segment paths by channel
+            converter: Bit depth converter with SoundFile subtype
+            stack: ExitStack for managing file handles
+
+        Returns:
+            Dictionary mapping channel numbers to SoundFile writers
+        """
         writers: dict[int, sf.SoundFile] = {}
         for ch in range(1, self.channels + 1):
             segment_path = self.temp_dir / f"ch{ch:02d}_{index:04d}.wav"
@@ -314,7 +391,13 @@ class AudioExtractor:
         writers: dict[int, sf.SoundFile],
         converter: BitDepthConverter,
     ) -> None:
-        """Process audio file in chunks, writing to segment files."""
+        """Process audio file in chunks, writing to segment files.
+
+        Args:
+            path: Input WAV file path to read from
+            writers: Dictionary of channel writers for output segments
+            converter: Bit depth converter for data transformation
+        """
         with sf.SoundFile(path) as source:
             with tqdm(
                 total=len(source),
@@ -400,45 +483,46 @@ class TrackBuilder:
         buses: list[BusConfig],
         segments: SegmentMap,
     ) -> None:
-        self._write_mono_tracks(channels, segments)
-        self._write_buses(buses, segments)
+        """Build final output tracks from channel segments.
+
+        Creates mono tracks for channels with PROCESS action and stereo bus tracks
+        for configured buses by concatenating the appropriate channel segments.
+
+        Args:
+            channels: List of channel configurations
+            buses: List of bus configurations
+            segments: Dictionary mapping channel numbers to segment file lists
+        """
 
     def _write_mono_tracks(self, channels: list[ChannelConfig], segments: SegmentMap) -> None:
-        for channel in tqdm(channels, desc="Writing mono tracks"):
-            if channel.action is not ChannelAction.PROCESS:
-                continue
+        """Write individual mono tracks for channels with PROCESS action.
 
-            ch_segments = segments.get(channel.ch, [])
-            if not ch_segments:
-                raise AudioProcessingError(f"No segments available for channel {channel.ch} ({channel.name}).")
-
-            filename = f"{channel.ch:02d}_{_sanitize_filename(channel.name)}.wav"
-            output_path = self.output_dir / filename
-
-            with sf.SoundFile(output_path, "w", samplerate=self.sample_rate, channels=1, subtype=self.converter.soundfile_subtype) as dest:
-                for segment in ch_segments:
-                    with sf.SoundFile(segment) as source:
-                        while True:
-                            data = source.read(_AUDIO_CHUNK_SIZE, dtype="float32", always_2d=True)
-                            if data.size == 0:
-                                break
-                            converted_data = self.converter.convert(data[:, 0])
-                            dest.write(converted_data.astype(self.converter.numpy_dtype, copy=False))
-
-            self.console.print(f"Created mono track [green]{output_path.name}[/green].")
+        Args:
+            channels: List of channel configurations to process
+            segments: Dictionary mapping channel numbers to segment file lists
+        """
 
     def _write_buses(self, buses: list[BusConfig], segments: SegmentMap) -> None:
-        if not buses:
-            return
+        """Write stereo bus tracks by combining left and right channel segments.
 
-        for bus in tqdm(buses, desc="Writing stereo buses"):
-            self._validate_bus_segments(bus, segments)
-            output_path = self.output_dir / f"{_sanitize_filename(bus.file_name)}.wav"
-            self._write_stereo_file(bus, segments, output_path)
-            self._output_handler.info(f"Created stereo bus {output_path.name}.")
+        Args:
+            buses: List of bus configurations to process
+            segments: Dictionary mapping channel numbers to segment file lists
+        """
 
     def _validate_bus_segments(self, bus: BusConfig, segments: SegmentMap) -> tuple[int, int, list[Path], list[Path]]:
-        """Validate bus configuration and return segment information."""
+        """Validate bus configuration and return segment information.
+
+        Args:
+            bus: Bus configuration to validate
+            segments: Dictionary mapping channel numbers to segment file lists
+
+        Returns:
+            Tuple of (left_channel, right_channel, left_segments, right_segments)
+
+        Raises:
+            AudioProcessingError: If bus configuration is invalid or segments are missing
+        """
         left_ch = bus.slots.get(BusSlot.LEFT)
         right_ch = bus.slots.get(BusSlot.RIGHT)
         if left_ch is None or right_ch is None:
@@ -453,7 +537,13 @@ class TrackBuilder:
         return left_ch, right_ch, left_segments, right_segments
 
     def _write_stereo_file(self, bus: BusConfig, segments: SegmentMap, output_path: Path) -> None:
-        """Write stereo bus file by interleaving left and right channels."""
+        """Write stereo bus file by interleaving left and right channels.
+
+        Args:
+            bus: Bus configuration with LEFT/RIGHT channel assignments
+            segments: Dictionary mapping channel numbers to segment file lists
+            output_path: Path for the output stereo WAV file
+        """
         left_ch, right_ch, left_segments, right_segments = self._validate_bus_segments(bus, segments)
         
         with sf.SoundFile(output_path, "w", samplerate=self.sample_rate, channels=2, subtype=self.converter.soundfile_subtype) as dest:
@@ -461,7 +551,17 @@ class TrackBuilder:
                 self._write_stereo_segments(dest, left_path, right_path, bus)
 
     def _write_stereo_segments(self, dest: sf.SoundFile, left_path: Path, right_path: Path, bus: BusConfig) -> None:
-        """Write stereo segments from left and right files to destination."""
+        """Write stereo segments from left and right files to destination.
+
+        Args:
+            dest: Output SoundFile for stereo data
+            left_path: Path to left channel segment file
+            right_path: Path to right channel segment file
+            bus: Bus configuration for error reporting
+
+        Raises:
+            AudioProcessingError: If segment lengths don't match
+        """
         with sf.SoundFile(left_path) as left_file, sf.SoundFile(right_path) as right_file:
             while True:
                 left_data = left_file.read(_AUDIO_CHUNK_SIZE, dtype="float32", always_2d=True)

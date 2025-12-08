@@ -18,6 +18,7 @@ from src.models import (
 from src.exceptions import ConfigError, AudioProcessingError
 from src.m32_processor import AudioExtractor, TrackBuilder, ConfigLoader
 from src.constants import VERSION
+from src.types import ChannelDict, BusDict
 from rich.console import Console
 
 import logging
@@ -34,25 +35,25 @@ logger = logging.getLogger(__name__)
 # Channel definitions – list of dicts for easy editing and future config file support
 # Any missing channels 1–N (where N is detected channel count) are auto-created as "Ch XX" with action=PROCESS
 # Log warnings for auto-created channels to alert users
-CHANNELS: list[dict[str, object]] = [
+CHANNELS: list[ChannelDict] = [
     {"ch": 1, "name": "Kick In"},
     {"ch": 2, "name": "Kick Out"},
     {"ch": 3, "name": "Snare Top"},
-    {"ch": 31, "name": "Click", "action": ChannelAction.SKIP},
-    {"ch": 32, "name": "Talkback", "action": ChannelAction.SKIP},
+    {"ch": 31, "name": "Click", "action": "SKIP"},
+    {"ch": 32, "name": "Talkback", "action": "SKIP"},
 ]
 
 # Bus definitions – list of dicts, each owns its slot-to-channel mappings and custom file name
-BUSES: list[dict[str, object]] = [
+BUSES: list[BusDict] = [
     {
         "file_name": "07_Overheads",
-        "type": BusType.STEREO,
-        "slots": {BusSlot.LEFT: 7, BusSlot.RIGHT: 8},
+        "type": "STEREO",
+        "slots": {"LEFT": 7, "RIGHT": 8},
     },
     {
         "file_name": "15_Room Mics",
-        "type": BusType.STEREO,
-        "slots": {BusSlot.LEFT: 15, BusSlot.RIGHT: 16},
+        "type": "STEREO",
+        "slots": {"LEFT": 15, "RIGHT": 16},
     },
 ]
 
@@ -97,6 +98,11 @@ app = typer.Typer(add_completion=False, help="Midas M32 multitrack processor")
 
 
 def version_callback(value: bool) -> None:
+    """Handle version flag callback for Typer CLI.
+
+    Args:
+        value: Whether the version flag was provided
+    """
     if value:
         typer.echo(f"Channel Weaver v{VERSION}")
         raise typer.Exit()
