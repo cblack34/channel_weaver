@@ -158,9 +158,6 @@ def main(
             console=console,
         )
         builder.build_tracks(channels, buses, segments)
-
-        # Handle cleanup
-        extractor.cleanup()
         
     except (ConfigError, AudioProcessingError) as e:
         console.print(f"[red]Error:[/red] {e}")

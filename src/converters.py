@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 from typing import Protocol
 import numpy as np
-from .models import BitDepth
+from src.models import BitDepth
 
 
 class BitDepthConverter(Protocol):
