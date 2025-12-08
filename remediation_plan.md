@@ -473,19 +473,19 @@ The code uses **deprecated `@validator` decorator** which should be `@field_vali
 
 ### 5.1 Logging
 
-- [ ] **Add logging configuration**: Create logger at module level with configurable level:
+- [x] **Add logging configuration**: Create logger at module level with configurable level:
   ```python
   import logging
   
   logger = logging.getLogger(__name__)
   ```
   
-- [ ] **Replace print/echo statements**: Convert `console.print()` to `logger.info()` for operational messages
-- [ ] **Keep Rich for user-facing output**: Use Rich Console for progress bars and formatted output, logging for debug/info
-- [ ] **Add --verbose flag**: Wire to logging level adjustment:
+- [x] **Replace print/echo statements**: Convert `console.print()` to `logger.info()` for operational messages
+- [x] **Keep Rich for user-facing output**: Use Rich Console for progress bars and formatted output, logging for debug/info
+- [x] **Add --verbose flag**: Wire to logging level adjustment:
   ```python
   verbose: bool = typer.Option(
-      False, "--verbose", "-v",
+      False, "--verbose",
       help="Enable verbose debug output"
   )
   ```

@@ -20,6 +20,16 @@ from src.m32_processor import AudioExtractor, TrackBuilder, ConfigLoader
 from src.constants import VERSION
 from rich.console import Console
 
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.WARNING,  # Default to WARNING level
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
+
 
 # Channel definitions – list of dicts for easy editing and future config file support
 # Any missing channels 1–N (where N is detected channel count) are auto-created as "Ch XX" with action=PROCESS
@@ -116,8 +126,19 @@ def main(
         is_flag=True,
         help="Show version and exit."
     ),
+    verbose: bool = typer.Option(
+        False, "--verbose",
+        help="Enable verbose debug output"
+    ),
 ) -> None:
     """Process multitrack recordings according to the provided configuration."""
+
+    # Configure logging level based on verbose flag
+    if verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+        logger.debug("Verbose logging enabled")
+    else:
+        logging.getLogger().setLevel(logging.WARNING)
 
     console = Console()
     

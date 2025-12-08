@@ -207,7 +207,7 @@ class AudioExtractor:
         wav_files = [path for path in self.input_dir.iterdir() if path.suffix.lower() == ".wav"]
         sorted_files = sorted(wav_files, key=self._sort_key)
 
-        self.console.print(f"Discovered {len(sorted_files)} input files in [bold]{self.input_dir}[/bold].")
+        logger.info(f"Discovered {len(sorted_files)} input files in {self.input_dir}.")
         return sorted_files
 
     def _sort_key(self, path: Path) -> tuple[int | float, str]:
@@ -243,8 +243,8 @@ class AudioExtractor:
         self.sample_rate = expected_rate
         self.channels = expected_channels
         self.bit_depth = _bit_depth_from_subtype(expected_subtype or "")
-        self.console.print(
-            f"Input audio: [bold]{self.channels}[/bold] channels @ [bold]{self.sample_rate} Hz[/bold], bit depth [bold]{self.bit_depth.value}[/bold]."
+        logger.info(
+            f"Input audio: {self.channels} channels @ {self.sample_rate} Hz, bit depth {self.bit_depth.value}."
         )
 
     def extract_segments(self, target_bit_depth: BitDepth | None = None) -> SegmentMap:
@@ -340,11 +340,11 @@ class AudioExtractor:
         """
 
         if self.keep_temp:
-            self.console.print("Skipping temp cleanup (keep-temp enabled).")
+            logger.info("Skipping temp cleanup (keep-temp enabled).")
             return
         if self.temp_dir.exists():
             shutil.rmtree(self.temp_dir)
-            self.console.print(f"Removed temporary directory {self.temp_dir}.")
+            logger.info(f"Removed temporary directory {self.temp_dir}.")
 
 
 class TrackBuilder:
