@@ -30,6 +30,7 @@ from src.validators import ChannelValidator, BusValidator
 from src.converters import get_converter, BitDepthConverter
 from src.protocols import OutputHandler, ConsoleOutputHandler
 from src.types import SegmentMap, ChannelData, BusData
+from src.constants import AUDIO_CHUNK_SIZE
 from src.exceptions import (
     ConfigError,
     ConfigValidationError,
@@ -163,9 +164,6 @@ class ConfigLoader:
 
 class AudioProcessingError(ConfigError):
     """Raised when audio files cannot be processed safely."""
-
-
-_AUDIO_CHUNK_SIZE = 131072  # frames processed per read operation
 
 
 def _sanitize_filename(name: str) -> str:
@@ -406,7 +404,7 @@ class AudioExtractor:
                 leave=False,
             ) as progress:
                 while True:
-                    data = source.read(_AUDIO_CHUNK_SIZE, dtype="float32", always_2d=True)
+                    data = source.read(AUDIO_CHUNK_SIZE, dtype="float32", always_2d=True)
                     if data.size == 0:
                         break
                     for ch, writer in writers.items():
@@ -564,8 +562,8 @@ class TrackBuilder:
         """
         with sf.SoundFile(left_path) as left_file, sf.SoundFile(right_path) as right_file:
             while True:
-                left_data = left_file.read(_AUDIO_CHUNK_SIZE, dtype="float32", always_2d=True)
-                right_data = right_file.read(_AUDIO_CHUNK_SIZE, dtype="float32", always_2d=True)
+                left_data = left_file.read(AUDIO_CHUNK_SIZE, dtype="float32", always_2d=True)
+                right_data = right_file.read(AUDIO_CHUNK_SIZE, dtype="float32", always_2d=True)
                 if len(left_data) == 0 and len(right_data) == 0:
                     break
                 if len(left_data) == 0 or len(right_data) == 0:
