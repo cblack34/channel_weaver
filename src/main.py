@@ -37,10 +37,37 @@ logger = logging.getLogger(__name__)
 # Log warnings for auto-created channels to alert users
 CHANNELS: list[ChannelDict] = [
     {"ch": 1, "name": "Kick In"},
-    {"ch": 2, "name": "Kick Out"},
-    {"ch": 3, "name": "Snare Top"},
-    {"ch": 31, "name": "Click", "action": "SKIP"},
-    {"ch": 32, "name": "Talkback", "action": "SKIP"},
+    {"ch": 2, "name": "Snare Top"},
+    {"ch": 3, "name": "Hi-Hat"},
+    {"ch": 4, "name": "Tom 1"},
+    {"ch": 5, "name": "Tom 2"},
+    {"ch": 6, "name": "Snare Bottom"},
+    {"ch": 7, "name": "Overhead L"},
+    {"ch": 8, "name": "Overhead R"},
+    {"ch": 9, "name": "Bass"},
+    {"ch": 10, "name": "Acoustic Guitar"},
+    {"ch": 11, "name": "Electric Guitar 1"},
+    {"ch": 12, "name": "Electric Guitar 2"},
+    {"ch": 13, "name": "Keyboard"},
+    {"ch": 14, "name": "Vocal 1"},
+    {"ch": 15, "name": "Vocal 2"},
+    {"ch": 16, "name": "Vocal 3"},
+    {"ch": 17, "name": "Click"},
+    {"ch": 18, "name": "Guide"},
+    {"ch": 19, "name": "Loop Left"},
+    {"ch": 20, "name": "Loop Right"},
+    {"ch": 21, "name": "blank", "action": "SKIP"},
+    {"ch": 22, "name": "blank", "action": "SKIP"},
+    {"ch": 23, "name": "blank", "action": "SKIP"},
+    {"ch": 24, "name": "blank", "action": "SKIP"},
+    {"ch": 25, "name": "blank", "action": "SKIP"},
+    {"ch": 26, "name": "blank", "action": "SKIP"},
+    {"ch": 27, "name": "blank", "action": "SKIP"},
+    {"ch": 28, "name": "blank", "action": "SKIP"},
+    {"ch": 29, "name": "blank", "action": "SKIP"},
+    {"ch": 30, "name": "blank", "action": "SKIP"},
+    {"ch": 31, "name": "blank", "action": "SKIP"},
+    {"ch": 32, "name": "blank", "action": "SKIP"},
 ]
 
 # Bus definitions – list of dicts, each owns its slot-to-channel mappings and custom file name
@@ -51,9 +78,9 @@ BUSES: list[BusDict] = [
         "slots": {"LEFT": 7, "RIGHT": 8},
     },
     {
-        "file_name": "15_Room Mics",
+        "file_name": "19_Loop",
         "type": "STEREO",
-        "slots": {"LEFT": 15, "RIGHT": 16},
+        "slots": {"LEFT": 19, "RIGHT": 20},
     },
 ]
 
