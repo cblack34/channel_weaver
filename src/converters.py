@@ -78,23 +78,42 @@ class Int16Converter:
         return scaled.astype(np.int16)
 
 
+class SourceConverter:
+    """Converter for source bit depth (preserves original bit depth as 32-bit PCM)."""
+
+    @property
+    def bit_depth(self) -> BitDepth:
+        return BitDepth.SOURCE
+
+    @property
+    def soundfile_subtype(self) -> str:
+        return "PCM_32"  # 32-bit signed integer
+
+    @property
+    def numpy_dtype(self) -> np.dtype:
+        return np.int32
+
+    def convert(self, data: np.ndarray) -> np.ndarray:
+        """Convert float32 data to 32-bit signed integer range."""
+        float_data = data.astype(np.float32, copy=False)
+        # Scale to 32-bit signed integer range: [-2^31, 2^31-1]
+        scaled = np.clip(np.rint(float_data * 2147483648.0), -2147483648, 2147483647)
+        return scaled.astype(np.int32)
+
+
 def get_converter(bit_depth: BitDepth) -> BitDepthConverter:
     """Factory function to get appropriate converter for the given bit depth.
 
     Args:
-        bit_depth: The target bit depth (must not be SOURCE)
+        bit_depth: The target bit depth
 
     Returns:
         BitDepthConverter: The appropriate converter instance
-
-    Raises:
-        ValueError: If bit_depth is SOURCE (must be resolved first)
     """
     converters = {
         BitDepth.FLOAT32: Float32Converter(),
         BitDepth.INT24: Int24Converter(),
         BitDepth.INT16: Int16Converter(),
+        BitDepth.SOURCE: SourceConverter(),
     }
-    if bit_depth is BitDepth.SOURCE:
-        raise ValueError("Cannot get converter for SOURCE bit depth; resolve to concrete bit depth first")
     return converters[bit_depth]

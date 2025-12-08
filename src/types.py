@@ -13,6 +13,7 @@ class ChannelDict(TypedDict, total=False):
     ch: int
     name: str
     action: str
+    output_ch: int
 
 
 class BusDict(TypedDict, total=False):
