@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import List
 
 from src.exceptions import AudioProcessingError
-from src.protocols import OutputHandler
+from src.output import OutputHandler
 
 
 class FFmpegExecutor:

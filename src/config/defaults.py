@@ -1,6 +1,6 @@
 """Default channel and bus configurations for Channel Weaver."""
 
-from src.types import ChannelDict, BusDict
+from .types import ChannelDict, BusDict
 
 # Channel definitions – list of dicts for easy editing and future config file support
 # Any missing channels 1–N (where N is detected channel count) are auto-created as "Ch XX" with action=PROCESS

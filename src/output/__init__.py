@@ -1,6 +1,6 @@
 """Output handling package for Channel Weaver."""
-from src.output.protocols import OutputHandler
-from src.output.console import ConsoleOutputHandler
+from .protocols import OutputHandler
+from .console import ConsoleOutputHandler
 
 __all__ = [
     "OutputHandler",

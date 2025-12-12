@@ -10,8 +10,8 @@ from src.config import ChannelConfig, ChannelAction
 from src.constants import AUDIO_CHUNK_SIZE
 from src.output.naming import build_output_path
 from src.processing.converters.protocols import BitDepthConverter
-from src.protocols import OutputHandler
-from src.types import SegmentMap
+from src.output.protocols import OutputHandler
+from src.config import SegmentMap
 
 
 class MonoTrackWriter:

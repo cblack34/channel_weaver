@@ -15,6 +15,9 @@ from .loader import ConfigLoader
 # Re-export defaults
 from .defaults import CHANNELS, BUSES
 
+# Re-export types
+from .types import SegmentMap, ChannelData, BusData, AudioInfo, ChannelDict, BusDict
+
 __all__ = [
     # Enums
     "ChannelAction",
@@ -32,4 +35,11 @@ __all__ = [
     # Defaults
     "CHANNELS",
     "BUSES",
+    # Types
+    "SegmentMap",
+    "ChannelData",
+    "BusData",
+    "AudioInfo",
+    "ChannelDict",
+    "BusDict",
 ]

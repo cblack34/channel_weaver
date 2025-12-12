@@ -11,10 +11,10 @@ from src.audio.ffmpeg.commands import FFmpegCommandBuilder
 from src.audio.ffmpeg.executor import FFmpegExecutor
 from src.audio.validation import AudioValidator
 from src.config import BitDepth
-from src.converters import get_converter
+from src.processing.converters import get_converter
 from src.exceptions import AudioProcessingError
-from src.protocols import OutputHandler, ConsoleOutputHandler
-from src.types import SegmentMap
+from src.output import OutputHandler, ConsoleOutputHandler
+from src.config import SegmentMap
 
 
 class AudioExtractor:

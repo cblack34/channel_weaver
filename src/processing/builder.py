@@ -9,8 +9,8 @@ from src.config import ChannelConfig, BusConfig, BitDepth
 from src.processing.converters import get_converter
 from src.processing.mono import MonoTrackWriter
 from src.processing.stereo import StereoTrackWriter
-from src.protocols import OutputHandler, ConsoleOutputHandler
-from src.types import SegmentMap
+from src.output import OutputHandler, ConsoleOutputHandler
+from src.config import SegmentMap
 
 
 class TrackBuilder:
