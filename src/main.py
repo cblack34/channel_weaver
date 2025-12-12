@@ -6,22 +6,20 @@ paths for downstream processing.
 """
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Optional
 
 import typer
-
-from src.models import (
-    ChannelAction, BusSlot, BusType, BitDepth,
-    ChannelConfig, BusConfig
-)
-from src.exceptions import ConfigError, AudioProcessingError
-from src.m32_processor import AudioExtractor, TrackBuilder, ConfigLoader
-from src.constants import VERSION
-from src.types import ChannelDict, BusDict
 from rich.console import Console
 
-import logging
+from src.constants import VERSION
+from src.exceptions import ConfigError, AudioProcessingError
+from src.m32_processor import AudioExtractor, TrackBuilder, ConfigLoader
+from src.models import (
+    BitDepth
+)
+from src.types import ChannelDict, BusDict
 
 # Configure logging
 logging.basicConfig(
@@ -30,7 +28,6 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 logger = logging.getLogger(__name__)
-
 
 # Channel definitions – list of dicts for easy editing and future config file support
 # Any missing channels 1–N (where N is detected channel count) are auto-created as "Ch XX" with action=PROCESS
@@ -143,32 +140,35 @@ def version_callback(value: bool) -> None:
 
 @app.command()
 def main(
-    input_path: Path = typer.Argument(
-        ..., exists=True, file_okay=False, dir_okay=True, readable=True, resolve_path=True, help="Directory containing sequential WAV files"
-    ),
-    output: Optional[Path] = typer.Option(
-        None,
-        "--output",
-        "-o",
-        file_okay=False,
-        dir_okay=True,
-        resolve_path=True,
-        help="Override the default output directory",
-    ),
-    bit_depth: BitDepth = typer.Option(BitDepth.SOURCE, "--bit-depth", help="Target bit depth for output files (source=preserve original)"),
-    temp_dir: Optional[Path] = typer.Option(None, "--temp-dir", file_okay=False, dir_okay=True, resolve_path=True, help="Custom temporary directory"),
-    keep_temp: bool = typer.Option(False, "--keep-temp", help="Keep temporary files instead of deleting them"),
-    version: bool = typer.Option(
-        None, "--version", "-v",
-        callback=version_callback,
-        is_eager=True,  # Critical: process before other options
-        is_flag=True,
-        help="Show version and exit."
-    ),
-    verbose: bool = typer.Option(
-        False, "--verbose",
-        help="Enable verbose debug output"
-    ),
+        input_path: Path = typer.Argument(
+            ..., exists=True, file_okay=False, dir_okay=True, readable=True, resolve_path=True,
+            help="Directory containing sequential WAV files"
+        ),
+        output: Optional[Path] = typer.Option(
+            None,
+            "--output",
+            "-o",
+            file_okay=False,
+            dir_okay=True,
+            resolve_path=True,
+            help="Override the default output directory",
+        ),
+        bit_depth: BitDepth = typer.Option(BitDepth.SOURCE, "--bit-depth",
+                                           help="Target bit depth for output files (source=preserve original)"),
+        temp_dir: Optional[Path] = typer.Option(None, "--temp-dir", file_okay=False, dir_okay=True, resolve_path=True,
+                                                help="Custom temporary directory"),
+        keep_temp: bool = typer.Option(False, "--keep-temp", help="Keep temporary files instead of deleting them"),
+        version: bool = typer.Option(
+            None, "--version", "-v",
+            callback=version_callback,
+            is_eager=True,  # Critical: process before other options
+            is_flag=True,
+            help="Show version and exit."
+        ),
+        verbose: bool = typer.Option(
+            False, "--verbose",
+            help="Enable verbose debug output"
+        ),
 ) -> None:
     """Process multitrack recordings according to the provided configuration."""
 
@@ -180,7 +180,7 @@ def main(
         logging.getLogger().setLevel(logging.WARNING)
 
     console = Console()
-    
+
     normalized_input = _sanitize_path(input_path)
     output_dir = _ensure_output_path(normalized_input, output)
     temp_root = _determine_temp_dir(output_dir, temp_dir)
@@ -218,7 +218,7 @@ def main(
             console=console,
         )
         builder.build_tracks(channels, buses, segments)
-        
+
     except (ConfigError, AudioProcessingError) as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(code=1)

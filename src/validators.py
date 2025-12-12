@@ -1,10 +1,10 @@
 """Validation utilities for Channel Weaver configuration."""
 
-from src.models import ChannelConfig, BusConfig, ChannelAction
 from src.exceptions import (
     DuplicateChannelError, ChannelOutOfRangeError,
     BusSlotOutOfRangeError, BusSlotDuplicateError, BusChannelConflictError
 )
+from src.models import ChannelConfig, ChannelAction
 
 
 class ChannelValidator:

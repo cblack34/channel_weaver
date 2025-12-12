@@ -14,23 +14,21 @@ The processing pipeline follows this flow:
 """
 from __future__ import annotations
 
-from contextlib import ExitStack
-from pathlib import Path
+import logging
 import re
 import shutil
+import subprocess
+from pathlib import Path
+from typing import Any
 from typing import Iterable, Optional
 
 import numpy as np
 import soundfile as sf
 from rich.console import Console
 from tqdm import tqdm
-import logging
-import subprocess
-from typing import Any
-from src.converters import get_converter, BitDepthConverter
-from src.protocols import OutputHandler, ConsoleOutputHandler
-from src.types import SegmentMap, ChannelData, BusData
+
 from src.constants import AUDIO_CHUNK_SIZE
+from src.converters import get_converter, BitDepthConverter
 from src.exceptions import (
     ConfigError,
     ConfigValidationError,
@@ -43,8 +41,9 @@ from src.models import (
     BusSlot,
     BitDepth,
 )
+from src.protocols import OutputHandler, ConsoleOutputHandler
+from src.types import SegmentMap, ChannelData, BusData
 from src.validators import ChannelValidator, BusValidator
-
 
 logger = logging.getLogger(__name__)
 
@@ -79,13 +78,13 @@ class ConfigLoader:
     """
 
     def __init__(
-        self,
-        channels_data: Iterable[ChannelData],
-        buses_data: Iterable[BusData],
-        *,
-        detected_channel_count: int | None = None,
-        channel_validator: ChannelValidator | None = None,
-        bus_validator: BusValidator | None = None,
+            self,
+            channels_data: Iterable[ChannelData],
+            buses_data: Iterable[BusData],
+            *,
+            detected_channel_count: int | None = None,
+            channel_validator: ChannelValidator | None = None,
+            bus_validator: BusValidator | None = None,
     ) -> None:
         """Initialize the configuration loader.
 
@@ -183,7 +182,7 @@ class ConfigLoader:
         return sorted(channels)
 
     def _complete_channel_list(
-        self, channels: list[ChannelConfig], bus_channels: list[int]
+            self, channels: list[ChannelConfig], bus_channels: list[int]
     ) -> list[ChannelConfig]:
         """Complete channel list with auto-created entries for missing channels.
 
@@ -252,12 +251,14 @@ def _resolve_bit_depth(requested: BitDepth, source: BitDepth | None) -> BitDepth
 
 def _get_audio_info_ffmpeg(path: Path) -> dict[str, Any]:
     """Get audio info using known values for the problematic files."""
+
     # For the known files, return the info from ffmpeg
     class MockInfo:
         def __init__(self):
             self.samplerate = 48000
             self.channels = 32
             self.subtype = 'PCM_S32_LE'
+
     return MockInfo()
     """Return a :class:`BitDepth` from a SoundFile subtype string."""
 
@@ -285,13 +286,13 @@ class AudioExtractor:
     """
 
     def __init__(
-        self,
-        input_dir: Path,
-        temp_dir: Path,
-        *,
-        keep_temp: bool = False,
-        console: Optional[Console] = None,
-        output_handler: OutputHandler | None = None,
+            self,
+            input_dir: Path,
+            temp_dir: Path,
+            *,
+            keep_temp: bool = False,
+            console: Optional[Console] = None,
+            output_handler: OutputHandler | None = None,
     ) -> None:
         """Initialize the audio extractor.
 
@@ -381,7 +382,8 @@ class AudioExtractor:
                 try:
                     info = self._get_audio_info_ffmpeg(path)
                 except Exception as ffmpeg_e:
-                    raise AudioProcessingError(f"Failed to read audio file {path} with both soundfile and ffmpeg: soundfile: {e}, ffmpeg: {ffmpeg_e}") from e
+                    raise AudioProcessingError(
+                        f"Failed to read audio file {path} with both soundfile and ffmpeg: soundfile: {e}, ffmpeg: {ffmpeg_e}") from e
             expected_rate = expected_rate or info.samplerate
             expected_channels = expected_channels or info.channels
             expected_subtype = expected_subtype or info.subtype
@@ -416,12 +418,14 @@ class AudioExtractor:
         data = json.loads(result.stdout)
         stream = data['streams'][0]
         format_info = data['format']
+
         # Create a mock _SoundFileInfo object
         class MockInfo:
             def __init__(self, samplerate, channels, subtype):
                 self.samplerate = samplerate
                 self.channels = channels
                 self.subtype = subtype
+
         subtype = stream.get('codec_name', 'pcm_s32le')
         if subtype == 'pcm_s32le':
             subtype = 'PCM_32'
@@ -465,12 +469,12 @@ class AudioExtractor:
         return segments
 
     def _process_file_segments(
-        self,
-        path: Path,
-        index: int,
-        segments: SegmentMap,
-        converter: BitDepthConverter,
-        bit_depth: BitDepth,
+            self,
+            path: Path,
+            index: int,
+            segments: SegmentMap,
+            converter: BitDepthConverter,
+            bit_depth: BitDepth,
     ) -> None:
         """Process a single file into per-channel segments using ffmpeg.
 
@@ -485,24 +489,24 @@ class AudioExtractor:
             BitDepth.INT24: 'pcm_s24le',
             BitDepth.FLOAT32: 'pcm_f32le',
         }.get(bit_depth, 'pcm_s32le')
-        
+
         # Build filter_complex for multiple pan filters
         pan_filters = '; '.join(f'[0:a]pan=mono|c0=c{i}[c{i}]' for i in range(self.channels))
         af = pan_filters
-        
+
         # Build the command with all maps
         cmd = ['ffmpeg', '-y', '-i', str(path), '-filter_complex', af]
         for ch in range(1, self.channels + 1):
             channel_index = ch - 1
             segment_path = self.temp_dir / f"ch{ch:02d}_{index:04d}.wav"
             cmd.extend(['-map', f'[c{channel_index}]', '-c:a', codec, str(segment_path)])
-        
+
         try:
             subprocess.run(cmd, check=True, capture_output=True)
         except subprocess.CalledProcessError as e:
             self._output_handler.error(f"ffmpeg failed for file {path}: {e.stderr.decode()}")
             raise
-        
+
         # Add segment paths to segments dict
         for ch in range(1, self.channels + 1):
             segment_path = self.temp_dir / f"ch{ch:02d}_{index:04d}.wav"
@@ -534,16 +538,16 @@ class TrackBuilder:
     """
 
     def __init__(
-        self,
-        sample_rate: int,
-        *,
-        bit_depth: BitDepth,
-        source_bit_depth: BitDepth | None = None,
-        temp_dir: Path,
-        output_dir: Path,
-        keep_temp: bool = False,
-        console: Optional[Console] = None,
-        output_handler: OutputHandler | None = None,
+            self,
+            sample_rate: int,
+            *,
+            bit_depth: BitDepth,
+            source_bit_depth: BitDepth | None = None,
+            temp_dir: Path,
+            output_dir: Path,
+            keep_temp: bool = False,
+            console: Optional[Console] = None,
+            output_handler: OutputHandler | None = None,
     ) -> None:
         """Initialize the track builder.
 
@@ -572,10 +576,10 @@ class TrackBuilder:
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def build_tracks(
-        self,
-        channels: list[ChannelConfig],
-        buses: list[BusConfig],
-        segments: SegmentMap,
+            self,
+            channels: list[ChannelConfig],
+            buses: list[BusConfig],
+            segments: SegmentMap,
     ) -> None:
         """Build final output tracks from channel segments.
 
@@ -607,7 +611,8 @@ class TrackBuilder:
                 self._output_handler.warning(f"No segments for channel {ch}")
                 continue
             output_path = str(self.output_dir / f"{output_ch:02d}_{ch_config.name}.wav")
-            with sf.SoundFile(output_path, "w", samplerate=self.sample_rate, channels=1, subtype=self.converter.soundfile_subtype) as dest:
+            with sf.SoundFile(output_path, "w", samplerate=self.sample_rate, channels=1,
+                              subtype=self.converter.soundfile_subtype) as dest:
                 for seg_path in ch_segments:
                     with sf.SoundFile(str(seg_path)) as src:
                         while True:
@@ -663,8 +668,9 @@ class TrackBuilder:
             output_path: Path for the output stereo WAV file
         """
         left_ch, right_ch, left_segments, right_segments = self._validate_bus_segments(bus, segments)
-        
-        with sf.SoundFile(output_path, "w", samplerate=self.sample_rate, channels=2, subtype=self.converter.soundfile_subtype) as dest:
+
+        with sf.SoundFile(output_path, "w", samplerate=self.sample_rate, channels=2,
+                          subtype=self.converter.soundfile_subtype) as dest:
             for left_path, right_path in zip(left_segments, right_segments):
                 self._write_stereo_segments(dest, left_path, right_path, bus)
 

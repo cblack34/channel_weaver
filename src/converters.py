@@ -1,8 +1,9 @@
 """Bit depth conversion strategies for Channel Weaver."""
 
-from abc import ABC, abstractmethod
 from typing import Protocol
+
 import numpy as np
+
 from src.models import BitDepth
 
 
