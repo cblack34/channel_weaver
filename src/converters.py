@@ -4,7 +4,7 @@ from typing import Protocol
 
 import numpy as np
 
-from src.models import BitDepth
+from src.config import BitDepth
 
 
 class BitDepthConverter(Protocol):

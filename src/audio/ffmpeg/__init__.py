@@ -1,0 +1,1 @@
+"""FFmpeg integration for audio extraction."""
