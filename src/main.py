@@ -6,105 +6,85 @@ paths for downstream processing.
 """
 from __future__ import annotations
 
-from enum import Enum, auto
+import logging
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Optional
 
 import typer
-from pydantic import BaseModel, Field, validator
+from rich.console import Console
 
+from src.constants import VERSION
+from src.exceptions import ConfigError, AudioProcessingError
+from src.m32_processor import AudioExtractor, TrackBuilder, ConfigLoader
+from src.models import (
+    BitDepth
+)
+from src.types import ChannelDict, BusDict
 
-class ChannelAction(Enum):
-    """Possible actions that can be taken for a channel."""
-
-    PROCESS = auto()
-    BUS = auto()
-    SKIP = auto()
-
-
-class BusSlot(Enum):
-    """Slot positions for stereo buses."""
-
-    LEFT = auto()
-    RIGHT = auto()
-
-
-class BusType(Enum):
-    """Supported bus types."""
-
-    STEREO = auto()
-
-    def required_slots(self) -> set[BusSlot]:
-        """Return the set of slots required for this bus type."""
-
-        if self is BusType.STEREO:
-            return {BusSlot.LEFT, BusSlot.RIGHT}
-        raise ValueError(f"Unsupported BusType: {self}")
-
-
-class BitDepth(str, Enum):
-    """Selectable bit depths for output files."""
-
-    FLOAT32 = "32float"
-    INT24 = "24"
-    INT16 = "16"
-
-    def __str__(self) -> str:  # pragma: no cover - convenience for Typer display
-        return self.value
-
-
-class ChannelConfig(BaseModel):
-    """User-editable channel configuration entry."""
-
-    ch: int = Field(..., ge=1, description="Channel number (1-based)")
-    name: str
-    action: ChannelAction = ChannelAction.PROCESS
-
-    @validator("action")
-    def validate_action(cls, value: ChannelAction) -> ChannelAction:  # noqa: B902
-        return value
-
-
-class BusConfig(BaseModel):
-    """User-editable bus configuration entry."""
-
-    file_name: str = Field(..., description="Custom file name for output, e.g., '07_overheads'")
-    type: BusType = BusType.STEREO
-    slots: dict[BusSlot, int] = Field(..., description="Slot to channel mapping")
-
-    @validator("slots")
-    def validate_slots(cls, value: dict[BusSlot, int], values: dict[str, object]) -> dict[BusSlot, int]:  # noqa: B902
-        bus_type = values.get("type", BusType.STEREO)
-        if isinstance(bus_type, BusType):
-            required = bus_type.required_slots()
-            if set(value.keys()) != required:
-                raise ValueError(f"{bus_type.name} buses require slots: {', '.join(slot.name for slot in required)}")
-        return value
-
+# Configure logging
+logging.basicConfig(
+    level=logging.WARNING,  # Default to WARNING level
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
 # Channel definitions – list of dicts for easy editing and future config file support
 # Any missing channels 1–N (where N is detected channel count) are auto-created as "Ch XX" with action=PROCESS
 # Log warnings for auto-created channels to alert users
-CHANNELS: list[dict[str, object]] = [
-    {"ch": 1, "name": "Kick In"},
-    {"ch": 2, "name": "Kick Out"},
-    {"ch": 3, "name": "Snare Top"},
-    {"ch": 31, "name": "Click", "action": ChannelAction.SKIP},
-    {"ch": 32, "name": "Talkback", "action": ChannelAction.SKIP},
+CHANNELS: list[ChannelDict] = [
+    {"ch": 1, "name": "Kick"},
+    {"ch": 2, "name": "Snare Top", "action": "SKIP"},
+    {"ch": 21, "name": "Snare Top", "output_ch": 2},
+    {"ch": 3, "name": "Hi-Hat"},
+    {"ch": 4, "name": "Tom 1"},
+    {"ch": 5, "name": "Tom 2"},
+    {"ch": 6, "name": "Snare Bottom"},
+    {"ch": 7, "name": "Overhead L", "action": "BUS"},
+    {"ch": 8, "name": "Overhead R", "action": "BUS"},
+    {"ch": 9, "name": "Bass"},
+    {"ch": 10, "name": "AG"},
+    {"ch": 11, "name": "EG 1"},
+    {"ch": 12, "name": "EG 2"},
+    {"ch": 13, "name": "Keys"},
+    {"ch": 14, "name": "Vox 1"},
+    {"ch": 15, "name": "Vox 2"},
+    {"ch": 16, "name": "Vox 3"},
+    {"ch": 17, "name": "Click"},
+    {"ch": 18, "name": "Guide"},
+    {"ch": 19, "name": "Loop Left", "action": "BUS"},
+    {"ch": 20, "name": "Loop Right", "action": "BUS"},
+    # {"ch": 21, "name": "Audience Left", "action": "SKIP"},
+    {"ch": 22, "name": "Audience Right", "action": "SKIP"},
+    {"ch": 23, "name": "HandHeld"},
+    {"ch": 24, "name": "HeadSet"},
+    {"ch": 25, "name": "blank", "action": "SKIP"},
+    {"ch": 26, "name": "blank", "action": "SKIP"},
+    {"ch": 27, "name": "blank", "action": "SKIP"},
+    {"ch": 28, "name": "blank", "action": "SKIP"},
+    {"ch": 29, "name": "blank", "action": "SKIP"},
+    {"ch": 30, "name": "blank", "action": "SKIP"},
+    {"ch": 31, "name": "blank", "action": "SKIP"},
+    {"ch": 32, "name": "blank", "action": "SKIP"},
 ]
 
 # Bus definitions – list of dicts, each owns its slot-to-channel mappings and custom file name
-BUSES: list[dict[str, object]] = [
+BUSES: list[BusDict] = [
     {
         "file_name": "07_Overheads",
-        "type": BusType.STEREO,
-        "slots": {BusSlot.LEFT: 7, BusSlot.RIGHT: 8},
+        "type": "STEREO",
+        "slots": {"LEFT": 7, "RIGHT": 8},
     },
     {
-        "file_name": "15_Room Mics",
-        "type": BusType.STEREO,
-        "slots": {BusSlot.LEFT: 15, BusSlot.RIGHT: 16},
+        "file_name": "19_Loop",
+        "type": "STEREO",
+        "slots": {"LEFT": 19, "RIGHT": 20},
     },
+    # {
+    #     "file_name": "21_Audience_Right_Mono",
+    #     "type": "STEREO",
+    #     "slots": {"LEFT": 21, "RIGHT": 22},
+    # }
 ]
 
 
@@ -112,24 +92,6 @@ def _sanitize_path(path: Path) -> Path:
     """Return a normalized, absolute version of ``path``."""
 
     return path.expanduser().resolve()
-
-
-class ConfigLoader:
-    """Load and validate user-editable channel and bus definitions."""
-
-    def __init__(self, channels_data: Iterable[dict[str, object]], buses_data: Iterable[dict[str, object]]) -> None:
-        self._channels_data = list(channels_data)
-        self._buses_data = list(buses_data)
-
-    def load_channels(self) -> list[ChannelConfig]:
-        """Create channel config models from raw data."""
-
-        return [ChannelConfig(**channel_dict) for channel_dict in self._channels_data]
-
-    def load_buses(self) -> list[BusConfig]:
-        """Create bus config models from raw data."""
-
-        return [BusConfig(**bus_dict) for bus_dict in self._buses_data]
 
 
 def _default_output_dir(input_path: Path) -> Path:
@@ -165,44 +127,104 @@ def _determine_temp_dir(output_dir: Path, override: Optional[Path]) -> Path:
 app = typer.Typer(add_completion=False, help="Midas M32 multitrack processor")
 
 
+def version_callback(value: bool) -> None:
+    """Handle version flag callback for Typer CLI.
+
+    Args:
+        value: Whether the version flag was provided
+    """
+    if value:
+        typer.echo(f"Channel Weaver v{VERSION}")
+        raise typer.Exit()
+
+
 @app.command()
 def main(
-    input_path: Path = typer.Argument(
-        ..., exists=True, file_okay=False, dir_okay=True, readable=True, resolve_path=True, help="Directory containing sequential WAV files"
-    ),
-    output: Optional[Path] = typer.Option(
-        None,
-        "--output",
-        "-o",
-        file_okay=False,
-        dir_okay=True,
-        resolve_path=True,
-        help="Override the default output directory",
-    ),
-    bit_depth: BitDepth = typer.Option(BitDepth.FLOAT32, "--bit-depth", help="Target bit depth for output files"),
-    temp_dir: Optional[Path] = typer.Option(None, "--temp-dir", file_okay=False, dir_okay=True, resolve_path=True, help="Custom temporary directory"),
-    keep_temp: bool = typer.Option(False, "--keep-temp", help="Keep temporary files instead of deleting them"),
+        input_path: Path = typer.Argument(
+            ..., exists=True, file_okay=False, dir_okay=True, readable=True, resolve_path=True,
+            help="Directory containing sequential WAV files"
+        ),
+        output: Optional[Path] = typer.Option(
+            None,
+            "--output",
+            "-o",
+            file_okay=False,
+            dir_okay=True,
+            resolve_path=True,
+            help="Override the default output directory",
+        ),
+        bit_depth: BitDepth = typer.Option(BitDepth.SOURCE, "--bit-depth",
+                                           help="Target bit depth for output files (source=preserve original)"),
+        temp_dir: Optional[Path] = typer.Option(None, "--temp-dir", file_okay=False, dir_okay=True, resolve_path=True,
+                                                help="Custom temporary directory"),
+        keep_temp: bool = typer.Option(False, "--keep-temp", help="Keep temporary files instead of deleting them"),
+        version: bool = typer.Option(
+            None, "--version", "-v",
+            callback=version_callback,
+            is_eager=True,  # Critical: process before other options
+            is_flag=True,
+            help="Show version and exit."
+        ),
+        verbose: bool = typer.Option(
+            False, "--verbose",
+            help="Enable verbose debug output"
+        ),
 ) -> None:
     """Process multitrack recordings according to the provided configuration."""
+
+    # Configure logging level based on verbose flag
+    if verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+        logger.debug("Verbose logging enabled")
+    else:
+        logging.getLogger().setLevel(logging.WARNING)
+
+    console = Console()
 
     normalized_input = _sanitize_path(input_path)
     output_dir = _ensure_output_path(normalized_input, output)
     temp_root = _determine_temp_dir(output_dir, temp_dir)
 
-    config_loader = ConfigLoader(CHANNELS, BUSES)
-    channels = config_loader.load_channels()
-    buses = config_loader.load_buses()
+    try:
+        # Initialize AudioExtractor
+        extractor = AudioExtractor(
+            input_dir=normalized_input,
+            temp_dir=temp_root,
+            keep_temp=keep_temp,
+            console=console,
+        )
 
-    typer.echo("Midas M32 multitrack processor")
-    typer.echo(f"Input directory: {normalized_input}")
-    typer.echo(f"Output directory: {output_dir}")
-    typer.echo(f"Temporary directory: {temp_root}")
-    typer.echo(f"Keep temporary files: {'yes' if keep_temp else 'no'}")
-    typer.echo(f"Selected bit depth: {bit_depth.value}")
-    typer.echo(f"Loaded {len(channels)} channel definitions and {len(buses)} bus definitions.")
+        # Discover and validate input files
+        extractor.discover_and_validate()
 
-    # Placeholder for future processing logic
-    typer.echo("Processing is not yet implemented in this scaffold.")
+        # Get detected channel count for ConfigLoader
+        detected_channel_count = extractor.channels
+
+        # Load and validate configuration
+        config_loader = ConfigLoader(CHANNELS, BUSES, detected_channel_count=detected_channel_count)
+        channels, buses = config_loader.load()
+
+        # Extract segments
+        segments = extractor.extract_segments(target_bit_depth=bit_depth)
+
+        # Build tracks
+        builder = TrackBuilder(
+            sample_rate=extractor.sample_rate,
+            bit_depth=bit_depth,
+            source_bit_depth=extractor.bit_depth,
+            temp_dir=temp_root,
+            output_dir=output_dir,
+            keep_temp=keep_temp,
+            console=console,
+        )
+        builder.build_tracks(channels, buses, segments)
+
+    except (ConfigError, AudioProcessingError) as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(code=1)
+    finally:
+        if not keep_temp and 'extractor' in locals():
+            extractor.cleanup()
 
 
 if __name__ == "__main__":

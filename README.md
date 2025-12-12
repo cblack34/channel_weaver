@@ -30,7 +30,7 @@ A high-quality, memory-efficient Python CLI tool for processing multitrack audio
 
 Run the script with:
 ```
-uv run channel_weaver.py <input_path> [options]
+uv run python -m src.main <input_path> [options]
 ```
 
 ### Options
@@ -42,9 +42,11 @@ uv run channel_weaver.py <input_path> [options]
 - `--help`: Show help.
 
 ### Configuration
-Edit the user configuration section at the top of `channel_weaver.py`:
+Edit the user configuration section in your project directory. Create a `config.py` file with:
 
 ```python
+from src.models import ChannelAction, BusSlot, BusType
+
 CHANNELS = [
     {"ch": 1, "name": "Kick In"},
     {"ch": 2, "name": "Kick Out"},
