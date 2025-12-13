@@ -22,3 +22,22 @@ dev = [
     "pytest-xdist>=3.8.0",
     "ruff>=0.14.9",
 ]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra -q --strict-markers --strict-config"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning",
+]
+markers = [
+    "unit: Unit tests (fast, isolated)",
+    "integration: Integration tests (may use real filesystem)",
+    "slow: Tests that take more than 1 second",
+    "ffmpeg: Tests that involve FFmpeg mocking",
+    "pydantic: Tests for Pydantic model validation",
+]
