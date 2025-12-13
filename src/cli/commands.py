@@ -1,9 +1,7 @@
 """CLI command implementations for Channel Weaver."""
-from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -40,7 +38,7 @@ def main(
             ..., exists=True, file_okay=False, dir_okay=True, readable=True, resolve_path=True,
             help="Directory containing sequential WAV files"
         ),
-        output: Optional[Path] = typer.Option(
+        output: Path | None = typer.Option(
             None,
             "--output",
             "-o",
@@ -51,7 +49,7 @@ def main(
         ),
         bit_depth: BitDepth = typer.Option(BitDepth.SOURCE, "--bit-depth",
                                            help="Target bit depth for output files (source=preserve original)"),
-        temp_dir: Optional[Path] = typer.Option(None, "--temp-dir", file_okay=False, dir_okay=True, resolve_path=True,
+        temp_dir: Path | None = typer.Option(None, "--temp-dir", file_okay=False, dir_okay=True, resolve_path=True,
                                                 help="Custom temporary directory"),
         keep_temp: bool = typer.Option(False, "--keep-temp", help="Keep temporary files instead of deleting them"),
         version: bool = typer.Option(

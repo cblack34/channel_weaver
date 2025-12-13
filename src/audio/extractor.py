@@ -1,7 +1,6 @@
 """Audio extraction orchestration for Channel Weaver."""
 
 from pathlib import Path
-from typing import Optional
 import shutil
 
 from rich.console import Console
@@ -33,7 +32,7 @@ class AudioExtractor:
         temp_dir: Path,
         *,
         keep_temp: bool = False,
-        console: Optional[Console] = None,
+        console: Console | None = None,
         output_handler: OutputHandler | None = None,
     ) -> None:
         """Initialize the audio extractor.

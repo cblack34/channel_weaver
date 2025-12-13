@@ -1,7 +1,6 @@
 """Track building orchestration for Channel Weaver."""
 
 from pathlib import Path
-from typing import Optional
 
 from rich.console import Console
 
@@ -31,7 +30,7 @@ class TrackBuilder:
         temp_dir: Path,
         output_dir: Path,
         keep_temp: bool = False,
-        console: Optional[Console] = None,
+        console: Console | None = None,
         output_handler: OutputHandler | None = None,
     ) -> None:
         """Initialize the track builder.

@@ -1,5 +1,4 @@
 """CLI application definition for Channel Weaver."""
-from __future__ import annotations
 
 import typer
 

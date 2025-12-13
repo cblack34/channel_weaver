@@ -1,11 +1,11 @@
 """Type aliases for Channel Weaver."""
 from pathlib import Path
-from typing import TypeAlias, TypedDict
+from typing import TypedDict
 
-SegmentMap: TypeAlias = dict[int, list[Path]]
-ChannelData: TypeAlias = dict[str, object]
-BusData: TypeAlias = dict[str, object]
-AudioInfo: TypeAlias = tuple[int, int, str]  # (sample_rate, channels, subtype)
+type SegmentMap = dict[int, list[Path]]
+type ChannelData = dict[str, object]
+type BusData = dict[str, object]
+type AudioInfo = tuple[int, int, str]  # (sample_rate, channels, subtype)
 
 
 class ChannelDict(TypedDict, total=False):
