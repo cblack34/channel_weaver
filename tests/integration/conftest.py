@@ -11,7 +11,6 @@ import numpy as np
 import pytest
 import soundfile as sf
 
-from src.config.enums import BitDepth
 
 
 @pytest.fixture(scope="session")

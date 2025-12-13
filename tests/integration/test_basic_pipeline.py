@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 import soundfile as sf
 
 from src.audio.extractor import AudioExtractor

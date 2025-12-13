@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 
 from src.cli.utils import _sanitize_path, _default_output_dir, _ensure_output_path, _determine_temp_dir
 
