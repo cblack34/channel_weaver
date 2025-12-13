@@ -11,13 +11,12 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import TYPE_CHECKING
-from collections.abc import Generator
 
 import pytest
 from pytest_mock import MockerFixture
 
 if TYPE_CHECKING:
-    from _pytest.fixtures import FixtureRequest
+    pass
 
 
 # =============================================================================
