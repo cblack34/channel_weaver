@@ -33,6 +33,7 @@ class FFmpegCommandBuilder:
             BitDepth.INT16: 'pcm_s16le',
             BitDepth.INT24: 'pcm_s24le',
             BitDepth.FLOAT32: 'pcm_f32le',
+            BitDepth.SOURCE: 'pcm_s32le',  # SOURCE should be resolved before calling this
         }.get(bit_depth, 'pcm_s32le')
 
         # Build filter_complex for multiple pan filters

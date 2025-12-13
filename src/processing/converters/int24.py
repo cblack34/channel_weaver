@@ -2,8 +2,6 @@
 
 import numpy as np
 
-from src.processing.converters.protocols import BitDepthConverter
-
 
 class Int24Converter:
     """Converter for 24-bit integer output."""

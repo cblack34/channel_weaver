@@ -5,7 +5,7 @@ from typing import List
 
 from tqdm import tqdm
 
-from src.audio.info import AudioInfoRetriever, AudioInfo
+from src.audio.info import AudioInfoRetriever
 from src.config import BitDepth
 from src.exceptions import AudioProcessingError
 

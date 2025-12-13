@@ -3,7 +3,6 @@
 import numpy as np
 
 from src.config import BitDepth
-from src.processing.converters.protocols import BitDepthConverter
 
 
 class SourceConverter:

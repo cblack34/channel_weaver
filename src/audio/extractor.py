@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from typing import Optional
+import shutil
 
 from rich.console import Console
 from tqdm import tqdm
@@ -12,6 +13,7 @@ from src.audio.ffmpeg.executor import FFmpegExecutor
 from src.audio.validation import AudioValidator
 from src.config import BitDepth
 from src.processing.converters import get_converter
+from src.processing.converters.factory import resolve_bit_depth
 from src.exceptions import AudioProcessingError
 from src.output import OutputHandler, ConsoleOutputHandler
 from src.config import SegmentMap
@@ -103,7 +105,7 @@ class AudioExtractor:
         assert self.bit_depth is not None
 
         requested_bit_depth = target_bit_depth or self.bit_depth
-        effective_bit_depth = self._resolve_bit_depth(requested_bit_depth, self.bit_depth)
+        effective_bit_depth = resolve_bit_depth(requested_bit_depth, self.bit_depth)
         converter = get_converter(effective_bit_depth)
 
         self.temp_dir.mkdir(parents=True, exist_ok=True)
@@ -147,26 +149,11 @@ class AudioExtractor:
             segment_path = self.temp_dir / f"ch{ch:02d}_{index:04d}.wav"
             segments[ch].append(segment_path)
 
-    def _resolve_bit_depth(self, requested: BitDepth, source: BitDepth) -> BitDepth:
-        """Resolve the effective bit depth to use.
-
-        Args:
-            requested: Requested bit depth
-            source: Source bit depth
-
-        Returns:
-            Effective bit depth to use
-        """
-        if requested == BitDepth.SOURCE:
-            return source
-        return requested
-
     def cleanup(self) -> None:
         """Delete temporary files unless keep_temp was requested."""
         if self.keep_temp:
             self._output_handler.info("Skipping temp cleanup (keep-temp enabled).")
             return
         if self.temp_dir.exists():
-            import shutil
             shutil.rmtree(self.temp_dir)
             self._output_handler.info(f"Removed temporary directory {self.temp_dir}.")

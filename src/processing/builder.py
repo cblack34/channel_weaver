@@ -6,7 +6,7 @@ from typing import Optional
 from rich.console import Console
 
 from src.config import ChannelConfig, BusConfig, BitDepth
-from src.processing.converters import get_converter
+from src.processing.converters.factory import get_converter, resolve_bit_depth
 from src.processing.mono import MonoTrackWriter
 from src.processing.stereo import StereoTrackWriter
 from src.output import OutputHandler, ConsoleOutputHandler
@@ -48,7 +48,7 @@ class TrackBuilder:
                 if None is provided.
             output_handler: Optional output handler for dependency injection.
         """
-        resolved_bit_depth = self._resolve_bit_depth(bit_depth, source_bit_depth)
+        resolved_bit_depth = resolve_bit_depth(bit_depth, source_bit_depth)
         converter = get_converter(resolved_bit_depth)
 
         self.sample_rate = sample_rate
@@ -94,17 +94,3 @@ class TrackBuilder:
         self.mono_writer.write_tracks(channels, segments)
         self.stereo_writer.write_tracks(buses, segments)
         self._output_handler.info(f"Tracks written to {self.output_dir}")
-
-    def _resolve_bit_depth(self, requested: BitDepth, source: BitDepth | None) -> BitDepth:
-        """Resolve the effective bit depth to use.
-
-        Args:
-            requested: Requested bit depth
-            source: Source bit depth
-
-        Returns:
-            Effective bit depth to use
-        """
-        if requested == BitDepth.SOURCE:
-            return source or BitDepth.FLOAT32
-        return requested

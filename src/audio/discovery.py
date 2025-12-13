@@ -26,7 +26,7 @@ class AudioFileDiscovery:
         Returns:
             Sorted list of WAV file paths, ordered by numeric sequence in filename
         """
-        wav_files = list(self.input_dir.glob("*.wav"))
+        wav_files = list(self.input_dir.glob("*.[wW][aA][vV]"))
         wav_files.sort(key=self._sort_key)
         return wav_files
 
