@@ -2,8 +2,6 @@
 
 import numpy as np
 
-from src.processing.converters.protocols import BitDepthConverter
-
 
 class Float32Converter:
     """Converter for 32-bit float output."""

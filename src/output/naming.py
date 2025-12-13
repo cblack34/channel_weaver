@@ -24,7 +24,8 @@ def sanitize_filename(name: str) -> str:
     name = re.sub(r'[<>:"/\\|?*]', '_', name)
     # Remove control characters
     name = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', name)
-    return name
+    # Return default name if result is empty
+    return name or "track"
 
 
 def build_output_path(output_dir: Path, channel_num: int, name: str, extension: str = "wav") -> Path:

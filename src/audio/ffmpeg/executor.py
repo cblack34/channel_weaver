@@ -30,7 +30,7 @@ class FFmpegExecutor:
             AudioProcessingError: If FFmpeg execution fails
         """
         try:
-            result = subprocess.run(command, check=True, capture_output=True)
+            subprocess.run(command, check=True, capture_output=True)
         except subprocess.CalledProcessError as e:
             error_msg = e.stderr.decode() if e.stderr else str(e)
             self.output_handler.error(f"FFmpeg failed for file {input_path}: {error_msg}")

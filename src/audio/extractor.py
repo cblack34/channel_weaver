@@ -106,7 +106,6 @@ class AudioExtractor:
 
         requested_bit_depth = target_bit_depth or self.bit_depth
         effective_bit_depth = resolve_bit_depth(requested_bit_depth, self.bit_depth)
-        converter = get_converter(effective_bit_depth)
 
         self.temp_dir.mkdir(parents=True, exist_ok=True)
         segments: SegmentMap = {ch: [] for ch in range(1, self.channels + 1)}

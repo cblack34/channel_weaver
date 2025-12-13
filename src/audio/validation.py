@@ -89,7 +89,7 @@ class AudioValidator:
         mapping = {
             "PCM_16": BitDepth.INT16,
             "PCM_24": BitDepth.INT24,
-            "PCM_32": BitDepth.FLOAT32,
+            "PCM_32": BitDepth.SOURCE,  # 32-bit signed integer
             "FLOAT": BitDepth.FLOAT32,
             "DOUBLE": BitDepth.FLOAT32,
         }
