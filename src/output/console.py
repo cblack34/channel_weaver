@@ -2,7 +2,6 @@
 
 from rich.console import Console
 
-from src.output.protocols import OutputHandler
 
 
 class ConsoleOutputHandler:
