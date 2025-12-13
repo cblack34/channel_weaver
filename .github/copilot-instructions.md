@@ -4,8 +4,8 @@ applyTo: "**"
 # Channel Weaver Development Guidelines
 
 ## Import Standards
-- **ALWAYS use absolute imports** from the `src` package (e.g., `from src.models import ChannelConfig`)
-- **NEVER use relative imports** (e.g., `from ..models import ChannelConfig`)
+- **ALWAYS use absolute imports** from the `src` package (e.g., `from src.config import ChannelConfig`)
+- **NEVER use relative imports** (e.g., `from ..config import ChannelConfig`)
 - Import order: standard library, third-party packages, local modules
 - Group imports by category with blank lines between groups
 

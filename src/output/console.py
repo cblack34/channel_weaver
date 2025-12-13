@@ -1,28 +1,8 @@
-"""Protocols for dependency injection."""
-from typing import Protocol, runtime_checkable
+"""Console-based output handler for Channel Weaver."""
 
 from rich.console import Console
 
-
-@runtime_checkable
-class OutputHandler(Protocol):
-    """Protocol for output handling (console, logging, etc.)."""
-
-    def print(self, message: str, **kwargs) -> None:
-        """Print an informational message."""
-        ...
-
-    def info(self, message: str) -> None:
-        """Print an informational message (alias for print)."""
-        ...
-
-    def warning(self, message: str) -> None:
-        """Print a warning message."""
-        ...
-
-    def error(self, message: str) -> None:
-        """Print an error message."""
-        ...
+from src.output.protocols import OutputHandler
 
 
 class ConsoleOutputHandler:

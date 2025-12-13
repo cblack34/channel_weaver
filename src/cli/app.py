@@ -1,0 +1,11 @@
+"""CLI application definition for Channel Weaver."""
+from __future__ import annotations
+
+import typer
+
+from src.cli.commands import main
+
+app = typer.Typer(add_completion=False, help="Midas M32 multitrack processor")
+
+# Register the main command
+app.command()(main)

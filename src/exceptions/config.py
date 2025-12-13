@@ -1,14 +1,8 @@
-"""Custom exceptions for Channel Weaver."""
+"""Configuration-related exceptions for Channel Weaver."""
 
 from pydantic import ValidationError
 
-
-class ConfigError(Exception):
-    """Base class for user-facing configuration errors.
-
-    All configuration-related exceptions inherit from this class to ensure
-    consistent error handling and user messaging throughout the application.
-    """
+from src.exceptions.base import ConfigError
 
 
 class ConfigValidationError(ConfigError):
@@ -95,14 +89,3 @@ class BusChannelConflictError(ConfigError):
             f"Channel {ch} is used in a bus but configured to PROCESS or SKIP. Set its action to BUS or remove it from buses."
         )
         self.ch = ch
-
-
-class AudioProcessingError(ConfigError):
-    """Raised when audio file operations fail during processing.
-
-    This exception is raised for issues such as:
-    - Missing or corrupted WAV files
-    - Inconsistent audio parameters across files
-    - File system errors during reading/writing
-    - Unsupported audio formats or parameters
-    """

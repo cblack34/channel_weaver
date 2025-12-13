@@ -45,7 +45,7 @@ uv run python -m src.main <input_path> [options]
 Edit the user configuration section in your project directory. Create a `config.py` file with:
 
 ```python
-from src.models import ChannelAction, BusSlot, BusType
+from src.config import ChannelAction, BusSlot, BusType
 
 CHANNELS = [
     {"ch": 1, "name": "Kick In"},
