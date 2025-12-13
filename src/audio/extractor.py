@@ -12,7 +12,6 @@ from src.audio.ffmpeg.commands import FFmpegCommandBuilder
 from src.audio.ffmpeg.executor import FFmpegExecutor
 from src.audio.validation import AudioValidator
 from src.config import BitDepth
-from src.processing.converters import get_converter
 from src.processing.converters.factory import resolve_bit_depth
 from src.exceptions import AudioProcessingError
 from src.output import OutputHandler, ConsoleOutputHandler

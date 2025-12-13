@@ -5,7 +5,7 @@ from typing import Iterable
 from src.config.models import ChannelConfig, BusConfig, ChannelAction
 from src.config.validators import ChannelValidator, BusValidator
 from src.exceptions import ConfigValidationError
-from .types import ChannelData, BusData
+from src.config.types import ChannelData, BusData
 
 
 class ConfigLoader:

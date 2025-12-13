@@ -1,22 +1,22 @@
 """Configuration package for Channel Weaver."""
 
 # Re-export enums
-from .enums import ChannelAction, BusSlot, BusType, BitDepth
+from src.config.enums import ChannelAction, BusSlot, BusType, BitDepth
 
 # Re-export models
-from .models import ChannelConfig, BusConfig
+from src.config.models import ChannelConfig, BusConfig
 
 # Re-export validators
-from .validators import ChannelValidator, BusValidator
+from src.config.validators import ChannelValidator, BusValidator
 
 # Re-export loader
-from .loader import ConfigLoader
+from src.config.loader import ConfigLoader
 
 # Re-export defaults
-from .defaults import CHANNELS, BUSES
+from src.config.defaults import CHANNELS, BUSES
 
 # Re-export types
-from .types import SegmentMap, ChannelData, BusData, AudioInfo, ChannelDict, BusDict
+from src.config.types import SegmentMap, ChannelData, BusData, AudioInfo, ChannelDict, BusDict
 
 __all__ = [
     # Enums
