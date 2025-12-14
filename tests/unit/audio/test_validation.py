@@ -80,7 +80,7 @@ class TestAudioValidator:
         assert bit_depth == BitDepth.INT24
 
         # Verify get_info was called for each file
-        assert validator.info_retriever.get_info.call_count == 2
+        assert validator.info_retriever.get_info.call_count == 2  # type: ignore[attr-defined]
 
     def test_validate_sample_rate_mismatch_raises_error(
         self,
@@ -246,4 +246,4 @@ class TestAudioValidator:
         assert bit_depth == BitDepth.SOURCE
 
         # Verify get_info was called for each file
-        assert validator.info_retriever.get_info.call_count == 3
+        assert validator.info_retriever.get_info.call_count == 3  # type: ignore[attr-defined]

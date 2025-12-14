@@ -51,9 +51,9 @@ class TestMonoTrackWriter:
     ) -> None:
         """Test that write_tracks only processes channels with PROCESS action."""
         channels = [
-            ChannelConfig(ch=1, name="Kick", action=ChannelAction.PROCESS),
-            ChannelConfig(ch=2, name="Snare", action=ChannelAction.SKIP),
-            ChannelConfig(ch=3, name="Bass", action=ChannelAction.PROCESS),
+            ChannelConfig(ch=1, name="Kick", action=ChannelAction.PROCESS, output_ch=None),
+            ChannelConfig(ch=2, name="Snare", action=ChannelAction.SKIP, output_ch=None),
+            ChannelConfig(ch=3, name="Bass", action=ChannelAction.PROCESS, output_ch=None),
         ]
         segments: SegmentMap = {}
 
@@ -77,7 +77,7 @@ class TestMonoTrackWriter:
         output_handler: MagicMock,
     ) -> None:
         """Test that _write_track warns when no segments exist for a channel."""
-        ch_config = ChannelConfig(ch=1, name="Kick", action=ChannelAction.PROCESS)
+        ch_config = ChannelConfig(ch=1, name="Kick", action=ChannelAction.PROCESS, output_ch=None)
         segments: SegmentMap = {1: []}  # Empty segments list
 
         writer._write_track(ch_config, segments)
@@ -154,8 +154,8 @@ class TestStereoTrackWriter:
     ) -> None:
         """Test that write_tracks processes all buses."""
         buses = [
-            BusConfig(file_name="drums", type="STEREO", slots={BusSlot.LEFT: 1, BusSlot.RIGHT: 2}),
-            BusConfig(file_name="guitar", type="STEREO", slots={BusSlot.LEFT: 3, BusSlot.RIGHT: 4}),
+            BusConfig(file_name="drums", type="STEREO", slots={BusSlot.LEFT: 1, BusSlot.RIGHT: 2}),  # type: ignore[arg-type]
+            BusConfig(file_name="guitar", type="STEREO", slots={BusSlot.LEFT: 3, BusSlot.RIGHT: 4}),  # type: ignore[arg-type]
         ]
         segments: SegmentMap = {}
 
@@ -206,7 +206,7 @@ class TestStereoTrackWriter:
         tmp_path: Path,
     ) -> None:
         """Test _validate_bus_segments raises error when segment counts don't match."""
-        bus = BusConfig(file_name="test", type="STEREO", slots={BusSlot.LEFT: 1, BusSlot.RIGHT: 2})
+        bus = BusConfig(file_name="test", type="STEREO", slots={BusSlot.LEFT: 1, BusSlot.RIGHT: 2})  # type: ignore[arg-type]
         segments: SegmentMap = {
             1: [tmp_path / "left1.wav", tmp_path / "left2.wav"],  # 2 segments
             2: [tmp_path / "right1.wav"]  # 1 segment
@@ -221,7 +221,7 @@ class TestStereoTrackWriter:
         tmp_path: Path,
     ) -> None:
         """Test _validate_bus_segments returns correct data on success."""
-        bus = BusConfig(file_name="test", type="STEREO", slots={BusSlot.LEFT: 1, BusSlot.RIGHT: 2})
+        bus = BusConfig(file_name="test", type="STEREO", slots={BusSlot.LEFT: 1, BusSlot.RIGHT: 2})  # type: ignore[arg-type]
         left_segments = [tmp_path / "left1.wav", tmp_path / "left2.wav"]
         right_segments = [tmp_path / "right1.wav", tmp_path / "right2.wav"]
         segments: SegmentMap = {1: left_segments, 2: right_segments}
@@ -241,7 +241,7 @@ class TestStereoTrackWriter:
         mocker: MockerFixture,
     ) -> None:
         """Test _write_stereo_segments raises error when left channel ends prematurely."""
-        bus = BusConfig(file_name="test", type="STEREO", slots={BusSlot.LEFT: 1, BusSlot.RIGHT: 2})
+        bus = BusConfig(file_name="test", type="STEREO", slots={BusSlot.LEFT: 1, BusSlot.RIGHT: 2})  # type: ignore[arg-type]
         left_path = tmp_path / "left.wav"
         right_path = tmp_path / "right.wav"
         mock_dest_sf = MagicMock()
@@ -261,7 +261,7 @@ class TestStereoTrackWriter:
         mocker: MockerFixture,
     ) -> None:
         """Test _write_stereo_segments raises error when chunk sizes don't match."""
-        bus = BusConfig(file_name="test", type="STEREO", slots={BusSlot.LEFT: 1, BusSlot.RIGHT: 2})
+        bus = BusConfig(file_name="test", type="STEREO", slots={BusSlot.LEFT: 1, BusSlot.RIGHT: 2})  # type: ignore[arg-type]
         left_path = tmp_path / "left.wav"
         right_path = tmp_path / "right.wav"
         mock_dest_sf = MagicMock()
@@ -281,7 +281,7 @@ class TestStereoTrackWriter:
         mocker: MockerFixture,
     ) -> None:
         """Test _write_stereo_segments successfully writes stereo data."""
-        bus = BusConfig(file_name="test", type="STEREO", slots={BusSlot.LEFT: 1, BusSlot.RIGHT: 2})
+        bus = BusConfig(file_name="test", type="STEREO", slots={BusSlot.LEFT: 1, BusSlot.RIGHT: 2})  # type: ignore[arg-type]
         left_path = tmp_path / "left.wav"
         right_path = tmp_path / "right.wav"
         mock_dest_sf = MagicMock()

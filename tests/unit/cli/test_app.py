@@ -23,7 +23,7 @@ class TestAppConfiguration:
         """Test that app has the main command registered."""
         # The main command should be registered
         command_names = [cmd.name for cmd in app.registered_commands if hasattr(cmd, 'name')]
-        callback_names = [cmd.callback.__name__ for cmd in app.registered_commands if hasattr(cmd, 'callback')]
+        callback_names = [cmd.callback.__name__ for cmd in app.registered_commands if hasattr(cmd, 'callback')]  # type: ignore[union-attr]
 
         # Either the command is named 'main' or has a callback named 'main'
         assert "main" in command_names or "main" in callback_names
@@ -34,7 +34,7 @@ class TestAppConfiguration:
         main_command = None
         for cmd in app.registered_commands:
             if (hasattr(cmd, 'name') and cmd.name == "main") or \
-               (hasattr(cmd, 'callback') and cmd.callback.__name__ == "main"):
+               (hasattr(cmd, 'callback') and cmd.callback.__name__ == "main"):  # type: ignore[union-attr]
                 main_command = cmd
                 break
 
@@ -47,7 +47,7 @@ class TestAppConfiguration:
         # Find the main command callback
         callback = None
         for cmd in app.registered_commands:
-            if hasattr(cmd, 'callback') and cmd.callback.__name__ == "main":
+            if hasattr(cmd, 'callback') and cmd.callback.__name__ == "main":  # type: ignore[union-attr]
                 callback = cmd.callback
                 break
 

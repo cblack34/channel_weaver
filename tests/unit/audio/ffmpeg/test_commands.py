@@ -240,8 +240,8 @@ class TestFFmpegExecutor:
         assert "FFmpeg command failed: FFmpeg error: invalid input file" in str(exc_info.value)
 
         # Verify error was logged
-        mock_output_handler.error.assert_called_once()
-        error_call = mock_output_handler.error.call_args[0][0]
+        mock_output_handler.error.assert_called_once()  # type: ignore[attr-defined]
+        error_call = mock_output_handler.error.call_args[0][0]  # type: ignore[attr-defined]
         assert "FFmpeg failed for file" in error_call
         assert "FFmpeg error: invalid input file" in error_call
 
@@ -272,6 +272,6 @@ class TestFFmpegExecutor:
         assert "FFmpeg command failed:" in str(exc_info.value)
 
         # Verify error was logged
-        mock_output_handler.error.assert_called_once()
-        error_call = mock_output_handler.error.call_args[0][0]
+        mock_output_handler.error.assert_called_once()  # type: ignore[attr-defined]
+        error_call = mock_output_handler.error.call_args[0][0]  # type: ignore[attr-defined]
         assert "FFmpeg failed for file" in error_call

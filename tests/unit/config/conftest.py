@@ -25,7 +25,7 @@ def valid_channel_config() -> ChannelConfig:
     Returns:
         A properly configured ChannelConfig with default PROCESS action.
     """
-    return ChannelConfig(ch=1, name="Kick In", action=ChannelAction.PROCESS)
+    return ChannelConfig(ch=1, name="Kick In", action=ChannelAction.PROCESS, output_ch=None)
 
 
 @pytest.fixture

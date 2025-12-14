@@ -99,7 +99,7 @@ class TestTrackBuilder:
 
         # Mock ConsoleOutputHandler
         mock_console_handler = mocker.MagicMock()
-        mocker.patch("src.processing.builder.ConsoleOutputHandler", return_value=mock_console_handler)
+        mock_console_patch = mocker.patch("src.processing.builder.ConsoleOutputHandler", return_value=mock_console_handler)
 
         TrackBuilder(
             sample_rate=44100,
@@ -109,8 +109,7 @@ class TestTrackBuilder:
         )
 
         # Verify ConsoleOutputHandler was created
-        from src.processing.builder import ConsoleOutputHandler
-        ConsoleOutputHandler.assert_called_once()
+        mock_console_patch.assert_called_once()
 
     def test_init_creates_output_directory(
         self,
@@ -171,10 +170,10 @@ class TestTrackBuilder:
 
         # Test data
         channels = [
-            ChannelConfig(ch=1, name="Kick", action=ChannelAction.PROCESS),
+            ChannelConfig(ch=1, name="Kick", action=ChannelAction.PROCESS, output_ch=None),
         ]
         buses = [
-            BusConfig(file_name="drums", type="STEREO", slots={BusSlot.LEFT: 1, BusSlot.RIGHT: 2}),
+            BusConfig(file_name="drums", type="STEREO", slots={BusSlot.LEFT: 1, BusSlot.RIGHT: 2}),  # type: ignore[arg-type]
         ]
         segments: SegmentMap = {1: [tmp_path / "seg1.wav"]}
 

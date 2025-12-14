@@ -35,6 +35,7 @@ class TestBasicPipeline:
         # Verify detection
         assert extractor.channels == 8
         assert extractor.sample_rate == 44100
+        assert extractor.bit_depth is not None
         # Note: bit depth may be SOURCE or FLOAT32 depending on how soundfile detects it
         assert extractor.bit_depth.name in ["FLOAT32", "SOURCE"]
 
@@ -88,8 +89,8 @@ class TestBasicPipeline:
 
         # Step 3: Build tracks
         builder = TrackBuilder(
-            sample_rate=extractor.sample_rate,
-            bit_depth=extractor.bit_depth,
+            sample_rate=extractor.sample_rate,  # type: ignore[arg-type]
+            bit_depth=extractor.bit_depth,  # type: ignore[arg-type]
             source_bit_depth=extractor.bit_depth,
             temp_dir=temp_processing_dir,
             output_dir=output_dir,

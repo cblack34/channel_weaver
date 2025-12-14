@@ -17,7 +17,7 @@ class TestChannelConfig:
 
     def test_valid_channel_creation(self) -> None:
         """Test creating a valid ChannelConfig with minimum required fields."""
-        config = ChannelConfig(ch=1, name="Kick In")
+        config = ChannelConfig(ch=1, name="Kick In", output_ch=None)
 
         assert config.ch == 1
         assert config.name == "Kick_In"  # Note: spaces replaced with underscores
@@ -26,7 +26,7 @@ class TestChannelConfig:
 
     def test_name_whitespace_cleaning(self) -> None:
         """Test that channel names have whitespace trimmed and spaces replaced."""
-        config = ChannelConfig(ch=1, name="  Kick In  ")
+        config = ChannelConfig(ch=1, name="  Kick In  ", output_ch=None)
 
         assert config.name == "Kick_In"
 
@@ -44,21 +44,21 @@ class TestChannelConfig:
         expected_enum: ChannelAction,
     ) -> None:
         """Test that action strings are converted to ChannelAction enums."""
-        config = ChannelConfig(ch=1, name="Test", action=action_str)
+        config = ChannelConfig(ch=1, name="Test", action=action_str, output_ch=None)  # type: ignore[arg-type]
 
         assert config.action == expected_enum
 
     def test_invalid_channel_number_zero(self) -> None:
         """Test that channel number 0 raises ValidationError."""
         with pytest.raises(ValidationError) as exc_info:
-            ChannelConfig(ch=0, name="Invalid")
+            ChannelConfig(ch=0, name="Invalid", output_ch=None)
 
         assert "ch" in str(exc_info.value)
 
     def test_invalid_channel_number_negative(self) -> None:
         """Test that negative channel numbers raise ValidationError."""
         with pytest.raises(ValidationError) as exc_info:
-            ChannelConfig(ch=-1, name="Invalid")
+            ChannelConfig(ch=-1, name="Invalid", output_ch=None)
 
         assert "ch" in str(exc_info.value)
 
@@ -79,11 +79,11 @@ class TestChannelConfig:
     def test_invalid_action_raises_error(self) -> None:
         """Test that invalid action strings raise ValidationError."""
         with pytest.raises(ValidationError):
-            ChannelConfig(ch=1, name="Test", action="INVALID")
+            ChannelConfig(ch=1, name="Test", action="INVALID", output_ch=None)  # type: ignore[arg-type]
 
     def test_action_enum_direct_assignment(self) -> None:
         """Test that ChannelAction enums can be assigned directly."""
-        config = ChannelConfig(ch=1, name="Test", action=ChannelAction.BUS)
+        config = ChannelConfig(ch=1, name="Test", action=ChannelAction.BUS, output_ch=None)
 
         assert config.action == ChannelAction.BUS
 
@@ -108,8 +108,8 @@ class TestBusConfig:
         """Test that string slot keys are converted to BusSlot enums."""
         config = BusConfig(
             file_name="test",
-            type="STEREO",
-            slots={"LEFT": 1, "RIGHT": 2},
+            type="STEREO",  # type: ignore[arg-type]
+            slots={"LEFT": 1, "RIGHT": 2},  # type: ignore[dict-item,arg-type]
         )
 
         assert BusSlot.LEFT in config.slots
@@ -119,7 +119,7 @@ class TestBusConfig:
         """Test that string type values are converted to BusType enums."""
         config = BusConfig(
             file_name="test",
-            type="STEREO",
+            type="STEREO",  # type: ignore[arg-type]
             slots={BusSlot.LEFT: 1, BusSlot.RIGHT: 2},
         )
 
@@ -171,7 +171,7 @@ class TestBusConfig:
             BusConfig(
                 file_name="test",
                 type=BusType.STEREO,
-                slots={"INVALID": 1, BusSlot.RIGHT: 2},
+                slots={"INVALID": 1, BusSlot.RIGHT: 2},  # type: ignore[dict-item,arg-type]
             )
 
     def test_invalid_type_raises_error(self) -> None:
@@ -179,7 +179,7 @@ class TestBusConfig:
         with pytest.raises(ValidationError):
             BusConfig(
                 file_name="test",
-                type="INVALID",
+                type="INVALID",  # type: ignore[arg-type]
                 slots={BusSlot.LEFT: 1, BusSlot.RIGHT: 2},
             )
 

@@ -30,23 +30,23 @@ class TestChannelValidator:
 
     def test_validate_single_channel_passes(self, validator_32ch: ChannelValidator) -> None:
         """Test that single valid channel passes validation."""
-        channels = [ChannelConfig(ch=1, name="Kick")]
+        channels = [ChannelConfig(ch=1, name="Kick", output_ch=None)]
         validator_32ch.validate(channels)
 
     def test_validate_multiple_valid_channels_pass(self, validator_32ch: ChannelValidator) -> None:
         """Test that multiple valid channels pass validation."""
         channels = [
-            ChannelConfig(ch=1, name="Kick"),
-            ChannelConfig(ch=2, name="Snare"),
-            ChannelConfig(ch=32, name="Last"),
+            ChannelConfig(ch=1, name="Kick", output_ch=None),
+            ChannelConfig(ch=2, name="Snare", output_ch=None),
+            ChannelConfig(ch=32, name="Last", output_ch=None),
         ]
         validator_32ch.validate(channels)
 
     def test_validate_duplicate_channels_raises_error(self, validator_32ch: ChannelValidator) -> None:
         """Test that duplicate channel numbers raise DuplicateChannelError."""
         channels = [
-            ChannelConfig(ch=1, name="First"),
-            ChannelConfig(ch=1, name="Duplicate"),
+            ChannelConfig(ch=1, name="First", output_ch=None),
+            ChannelConfig(ch=1, name="Duplicate", output_ch=None),
         ]
 
         with pytest.raises(DuplicateChannelError) as exc_info:
@@ -56,7 +56,7 @@ class TestChannelValidator:
 
     def test_validate_channel_out_of_range_raises_error(self, validator_32ch: ChannelValidator) -> None:
         """Test that channel exceeding detected count raises error."""
-        channels = [ChannelConfig(ch=33, name="Out of Range")]
+        channels = [ChannelConfig(ch=33, name="Out of Range", output_ch=None)]
 
         with pytest.raises(ChannelOutOfRangeError) as exc_info:
             validator_32ch.validate(channels)
@@ -67,10 +67,10 @@ class TestChannelValidator:
     def test_validate_multiple_duplicates_shows_first(self, validator_32ch: ChannelValidator) -> None:
         """Test that multiple duplicates report the first duplicate found."""
         channels = [
-            ChannelConfig(ch=1, name="First"),
-            ChannelConfig(ch=2, name="Second"),
-            ChannelConfig(ch=1, name="Duplicate1"),
-            ChannelConfig(ch=2, name="Duplicate2"),
+            ChannelConfig(ch=1, name="First", output_ch=None),
+            ChannelConfig(ch=2, name="Second", output_ch=None),
+            ChannelConfig(ch=1, name="Duplicate1", output_ch=None),
+            ChannelConfig(ch=2, name="Duplicate2", output_ch=None),
         ]
 
         with pytest.raises(DuplicateChannelError) as exc_info:
@@ -83,7 +83,7 @@ class TestChannelValidator:
         """Test that channel 0 raises error (though this should be caught by Pydantic)."""
         validator = ChannelValidator(detected_channel_count=32)
         # Note: ChannelConfig should prevent ch=0, but let's test the validator anyway
-        channels = [ChannelConfig(ch=1, name="Valid")]  # This should work
+        channels = [ChannelConfig(ch=1, name="Valid", output_ch=None)]  # This should work
 
         validator.validate(channels)  # Should not raise
 
@@ -99,7 +99,7 @@ class TestChannelValidator:
     ) -> None:
         """Test validation with different detected channel counts."""
         validator = ChannelValidator(detected_channel_count=detected_count)
-        channels = [ChannelConfig(ch=invalid_ch, name="Invalid")]
+        channels = [ChannelConfig(ch=invalid_ch, name="Invalid", output_ch=None)]
 
         with pytest.raises(ChannelOutOfRangeError) as exc_info:
             validator.validate(channels)
@@ -158,8 +158,8 @@ class TestBusValidator:
     def test_validate_no_conflicts_bus_action_passes(self, validator_32ch: BusValidator) -> None:
         """Test that BUS action channels can be used in bus configuration."""
         channels = [
-            ChannelConfig(ch=7, name="OH Left", action=ChannelAction.BUS),
-            ChannelConfig(ch=8, name="OH Right", action=ChannelAction.BUS),
+            ChannelConfig(ch=7, name="OH Left", action=ChannelAction.BUS, output_ch=None),
+            ChannelConfig(ch=8, name="OH Right", action=ChannelAction.BUS, output_ch=None),
         ]
 
         validator_32ch.validate_no_conflicts(channels, [7, 8])
@@ -167,7 +167,7 @@ class TestBusValidator:
     def test_validate_no_conflicts_process_action_raises_error(self, validator_32ch: BusValidator) -> None:
         """Test that PROCESS action channels cannot be used in bus."""
         channels = [
-            ChannelConfig(ch=7, name="OH Left", action=ChannelAction.PROCESS),
+            ChannelConfig(ch=7, name="OH Left", action=ChannelAction.PROCESS, output_ch=None),
         ]
 
         with pytest.raises(BusChannelConflictError) as exc_info:
@@ -178,7 +178,7 @@ class TestBusValidator:
     def test_validate_no_conflicts_skip_action_raises_error(self, validator_32ch: BusValidator) -> None:
         """Test that SKIP action channels cannot be used in bus."""
         channels = [
-            ChannelConfig(ch=31, name="Click", action=ChannelAction.SKIP),
+            ChannelConfig(ch=31, name="Click", action=ChannelAction.SKIP, output_ch=None),
         ]
 
         with pytest.raises(BusChannelConflictError) as exc_info:
@@ -189,7 +189,7 @@ class TestBusValidator:
     def test_validate_no_conflicts_missing_channel_passes(self, validator_32ch: BusValidator) -> None:
         """Test that bus channels not in channel list pass validation."""
         channels = [
-            ChannelConfig(ch=1, name="Kick", action=ChannelAction.PROCESS),
+            ChannelConfig(ch=1, name="Kick", action=ChannelAction.PROCESS, output_ch=None),
         ]
 
         # Channel 7 is not in the channels list, so no conflict
@@ -198,8 +198,8 @@ class TestBusValidator:
     def test_validate_no_conflicts_multiple_conflicts_shows_first(self, validator_32ch: BusValidator) -> None:
         """Test that multiple conflicts report the first conflict found."""
         channels = [
-            ChannelConfig(ch=7, name="OH Left", action=ChannelAction.PROCESS),
-            ChannelConfig(ch=8, name="OH Right", action=ChannelAction.PROCESS),
+            ChannelConfig(ch=7, name="OH Left", action=ChannelAction.PROCESS, output_ch=None),
+            ChannelConfig(ch=8, name="OH Right", action=ChannelAction.PROCESS, output_ch=None),
         ]
 
         with pytest.raises(BusChannelConflictError) as exc_info:
@@ -216,7 +216,7 @@ class TestBusValidator:
     ) -> None:
         """Test that non-BUS actions fail conflict validation."""
         channels = [
-            ChannelConfig(ch=7, name="Test", action=action),
+            ChannelConfig(ch=7, name="Test", action=action, output_ch=None),
         ]
 
         with pytest.raises(BusChannelConflictError):
