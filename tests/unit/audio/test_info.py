@@ -34,14 +34,13 @@ class TestAudioInfoRetriever:
         mock_sf_info.samplerate = 44100
         mock_sf_info.channels = 2
         mock_sf_info.subtype = "PCM_16"
-        mocker.patch("src.audio.info.sf.info", return_value=mock_sf_info)
+        mock_sf = mocker.patch("src.audio.info.sf.info", return_value=mock_sf_info)
 
         result = retriever.get_info(file_path)
 
         assert result == AudioInfo(samplerate=44100, channels=2, subtype="PCM_16")
         # Verify soundfile was called, not ffmpeg
-        import src.audio.info as info_module
-        info_module.sf.info.assert_called_once_with(file_path)
+        mock_sf.assert_called_once_with(file_path)
 
     def test_get_info_soundfile_fails_ffmpeg_success(
         self,

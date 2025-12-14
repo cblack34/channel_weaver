@@ -165,9 +165,6 @@ class TestFFmpegCommandBuilder:
 
         # Mock an unknown bit depth by patching the codec dict
         original_method = FFmpegCommandBuilder.build_channel_split_command
-        def mock_build(*args, **kwargs):
-            # Temporarily modify the codec mapping to test default
-            return original_method(*args, **kwargs)
 
         # Create a mock bit depth that's not in the mapping
         unknown_bit_depth = mocker.MagicMock()
