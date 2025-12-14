@@ -163,8 +163,7 @@ class TestFFmpegCommandBuilder:
         output_dir = tmp_path / "output"
         output_dir.mkdir()
 
-        # Mock an unknown bit depth by patching the codec dict
-        original_method = FFmpegCommandBuilder.build_channel_split_command
+        # Test with unknown bit depth defaults to pcm_s32le
 
         # Create a mock bit depth that's not in the mapping
         unknown_bit_depth = mocker.MagicMock()
