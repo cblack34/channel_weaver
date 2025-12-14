@@ -12,7 +12,7 @@ class Float32Converter:
 
     @property
     def numpy_dtype(self) -> np.dtype:
-        return np.float32
+        return np.dtype(np.float32)
 
     def convert(self, data: np.ndarray) -> np.ndarray:
         """Convert to 32-bit float (no-op for already normalized float data)."""

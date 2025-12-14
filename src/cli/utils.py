@@ -1,8 +1,6 @@
 """CLI utility functions for Channel Weaver."""
-from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 
 def _sanitize_path(path: Path) -> Path:
@@ -25,7 +23,7 @@ def _default_output_dir(input_path: Path) -> Path:
     return candidate
 
 
-def _ensure_output_path(input_path: Path, override: Optional[Path]) -> Path:
+def _ensure_output_path(input_path: Path, override: Path | None) -> Path:
     """Determine the effective output directory, respecting user overrides."""
 
     if override:
@@ -33,7 +31,7 @@ def _ensure_output_path(input_path: Path, override: Optional[Path]) -> Path:
     return _default_output_dir(input_path)
 
 
-def _determine_temp_dir(output_dir: Path, override: Optional[Path]) -> Path:
+def _determine_temp_dir(output_dir: Path, override: Path | None) -> Path:
     """Select the temporary directory to use for intermediate files."""
 
     if override:

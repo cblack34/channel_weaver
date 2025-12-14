@@ -18,7 +18,7 @@ class SourceConverter:
 
     @property
     def numpy_dtype(self) -> np.dtype:
-        return np.int32
+        return np.dtype(np.int32)
 
     def convert(self, data: np.ndarray) -> np.ndarray:
         """Convert float32 data to 32-bit signed integer range."""

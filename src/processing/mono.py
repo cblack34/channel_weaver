@@ -62,7 +62,7 @@ class MonoTrackWriter:
             self.output_handler.warning(f"No segments for channel {ch}")
             return
 
-        output_path = build_output_path(self.output_dir, output_ch, ch_config.name)
+        output_path = build_output_path(self.output_dir, output_ch, ch_config.name)  # type: ignore[arg-type]
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
 

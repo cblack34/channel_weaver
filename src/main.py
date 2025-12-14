@@ -4,7 +4,6 @@ This module exposes a Typer-powered command-line interface that wires editable
 channel and bus definitions into a validated configuration object and prepares
 paths for downstream processing.
 """
-from __future__ import annotations
 
 from src.cli.app import app
 

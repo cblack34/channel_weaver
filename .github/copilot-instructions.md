@@ -63,6 +63,12 @@ applyTo: "**"
 - **Script execution**: Use `uv run python script.py` for running standalone scripts
 - **Virtual environment**: uv automatically manages the virtual environment, no manual activation needed
 
+## Quality Assurance
+- **Always run quality checks after changes**: Execute `uv run pytest`, `uv run mypy src/ tests/`, and `uv run ruff check src/ tests/` after any code modifications
+- **Fix issues immediately**: Address any failing tests, type errors, or linting violations before proceeding
+- **CI Pipeline**: Ensure all changes pass the GitHub Actions CI pipeline which runs pytest, mypy, and ruff
+- **Test Coverage**: Maintain comprehensive test coverage for all new and modified code
+
 ## Documentation
 - **README**: Keep updated with correct commands and usage examples
 - **PRD Compliance**: Ensure all features match Product Requirements Document

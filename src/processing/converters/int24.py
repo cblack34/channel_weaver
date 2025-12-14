@@ -12,7 +12,7 @@ class Int24Converter:
 
     @property
     def numpy_dtype(self) -> np.dtype:
-        return np.int32
+        return np.dtype(np.int32)
 
     def convert(self, data: np.ndarray) -> np.ndarray:
         """Convert to 24-bit integer range."""
