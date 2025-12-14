@@ -8,7 +8,7 @@ from unittest.mock import patch
 import pytest
 from pytest_mock import MockerFixture
 
-from src.cli.commands import version_callback, main
+from src.cli.commands import version_callback, process
 from src.config.enums import BitDepth
 
 
@@ -54,6 +54,16 @@ class TestMainCommand:
         mocks["config_loader"] = mocker.patch("src.cli.commands.ConfigLoader")
         mocks["builder"] = mocker.patch("src.cli.commands.TrackBuilder")
 
+        # Mock ConfigResolver to return None (use defaults path)
+        # This ensures tests use the constructor path instead of from_yaml
+        mocks["config_resolver"] = mocker.patch("src.cli.commands.ConfigResolver")
+        mocks["config_resolver"].return_value.resolve.return_value = None
+
+        # Configure default return values for ConfigLoader paths
+        # Both constructor and from_yaml() classmethod need to return instances with load() method
+        mocks["config_loader"].return_value.load.return_value = ([], [])
+        mocks["config_loader"].from_yaml.return_value.load.return_value = ([], [])
+
         # Mock console
         mocks["console"] = mocker.patch("src.cli.commands.Console")
 
@@ -96,7 +106,7 @@ class TestMainCommand:
         mock_builder_instance.build_tracks.return_value = None
 
         # Execute main command
-        main(
+        process(
             input_path=input_path,
             output=None,
             bit_depth=BitDepth.INT16,
@@ -170,7 +180,7 @@ class TestMainCommand:
             mock_extractor_class.side_effect = Exception("Stop execution")
 
             with pytest.raises(Exception, match="Stop execution"):
-                main(
+                process(
                     input_path=tmp_path / "input",
                     output=None,
                     bit_depth=BitDepth.FLOAT32,
@@ -211,7 +221,7 @@ class TestMainCommand:
         mock_exit.side_effect = SystemExit(1)
 
         with pytest.raises(SystemExit):
-            main(
+            process(
                 input_path=tmp_path / "input",
                 output=None,
                 bit_depth=BitDepth.INT24,
@@ -258,7 +268,7 @@ class TestMainCommand:
         mock_exit.side_effect = SystemExit(1)
 
         with pytest.raises(SystemExit):
-            main(
+            process(
                 input_path=tmp_path / "input",
                 output=None,
                 bit_depth=BitDepth.SOURCE,
@@ -304,7 +314,7 @@ class TestMainCommand:
         mock_exit.side_effect = SystemExit(1)
 
         with pytest.raises(SystemExit):
-            main(
+            process(
                 input_path=tmp_path / "input",
                 output=None,
                 bit_depth=BitDepth.FLOAT32,
@@ -338,7 +348,7 @@ class TestMainCommand:
         mocks["config_loader"].return_value.load.return_value = ([], [])
 
         # Execute with keep_temp=True
-        main(
+        process(
             input_path=tmp_path / "input",
             output=None,
             bit_depth=BitDepth.INT16,

@@ -7,6 +7,7 @@ from src.exceptions.config import (
     BusSlotOutOfRangeError,
     BusSlotDuplicateError,
     BusChannelConflictError,
+    YAMLConfigError,
 )
 from src.exceptions.audio import AudioProcessingError
 
@@ -18,5 +19,6 @@ __all__ = [
     "BusSlotOutOfRangeError",
     "BusSlotDuplicateError",
     "BusChannelConflictError",
+    "YAMLConfigError",
     "AudioProcessingError",
 ]
