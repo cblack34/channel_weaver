@@ -42,8 +42,9 @@ class AudioFileDiscovery:
         filename = path.stem
         # Find the first sequence of digits
         match = re.search(r'\d+', filename)
+        num: int | float
         if match:
             num = int(match.group())
         else:
-            num = float('inf')  # Put files without numbers at the end
+            num = float('inf')
         return (num, filename)

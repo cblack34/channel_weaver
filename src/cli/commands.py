@@ -103,7 +103,7 @@ def main(
 
         # Build tracks
         builder = TrackBuilder(
-            sample_rate=extractor.sample_rate,
+            sample_rate=extractor.sample_rate,  # type: ignore[arg-type]
             bit_depth=bit_depth,
             source_bit_depth=extractor.bit_depth,
             temp_dir=temp_root,

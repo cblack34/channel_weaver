@@ -69,10 +69,12 @@ class ConfigLoader:
         channels = self._load_channels()
         buses = self._load_buses()
 
-        self._channel_validator.validate(channels)
+        if self._channel_validator:
+            self._channel_validator.validate(channels)
         bus_channels = self._collect_bus_channels(buses)
-        self._bus_validator.validate_channels(bus_channels)
-        self._bus_validator.validate_no_conflicts(channels, bus_channels)
+        if self._bus_validator:
+            self._bus_validator.validate_channels(bus_channels)
+            self._bus_validator.validate_no_conflicts(channels, bus_channels)
 
         completed_channels = self._complete_channel_list(channels, bus_channels)
         return completed_channels, buses
@@ -89,7 +91,7 @@ class ConfigLoader:
         channels = []
         for data in self._channels_data:
             try:
-                channel = ChannelConfig(**data)
+                channel = ChannelConfig(**data)  # type: ignore[arg-type]
                 channels.append(channel)
             except Exception as e:
                 raise ConfigValidationError(f"Invalid channel configuration: {data}") from e
@@ -107,7 +109,7 @@ class ConfigLoader:
         buses = []
         for data in self._buses_data:
             try:
-                bus = BusConfig(**data)
+                bus = BusConfig(**data)  # type: ignore[arg-type]
                 buses.append(bus)
             except Exception as e:
                 raise ConfigValidationError(f"Invalid bus configuration: {data}") from e
@@ -122,7 +124,7 @@ class ConfigLoader:
         Returns:
             Sorted list of unique channel numbers used in bus slots
         """
-        channels = set()
+        channels: set[int] = set()
         for bus in buses:
             channels.update(bus.slots.values())
         return sorted(channels)
@@ -152,7 +154,8 @@ class ConfigLoader:
                 existing[ch_num] = ChannelConfig(
                     ch=ch_num,
                     name=f"Channel {ch_num}",
-                    action=ChannelAction.BUS
+                    action=ChannelAction.BUS,
+                    output_ch=None
                 )
 
         # Add missing channels up to detected count
@@ -161,7 +164,8 @@ class ConfigLoader:
                 existing[ch_num] = ChannelConfig(
                     ch=ch_num,
                     name=f"Channel {ch_num}",
-                    action=ChannelAction.PROCESS
+                    action=ChannelAction.PROCESS,
+                    output_ch=None
                 )
 
         # Return sorted by channel number

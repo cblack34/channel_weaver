@@ -135,14 +135,14 @@ class AudioExtractor:
             input_path=path,
             output_dir=self.temp_dir,
             file_index=index,
-            channels=self.channels,
+            channels=self.channels,  # type: ignore[arg-type]
             bit_depth=bit_depth
         )
 
         self.executor.execute(command, path)
 
         # Add segment paths to segments dict
-        for ch in range(1, self.channels + 1):
+        for ch in range(1, self.channels + 1):  # type: ignore[operator]
             segment_path = self.temp_dir / f"ch{ch:02d}_{index:04d}.wav"
             segments[ch].append(segment_path)
 

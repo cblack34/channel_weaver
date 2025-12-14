@@ -57,3 +57,6 @@ exclude_lines = [
     "if TYPE_CHECKING:",
     "@abstractmethod",
 ]
+
+[tool.mypy]
+ignore_missing_imports = true

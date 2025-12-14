@@ -1,5 +1,7 @@
 """Factory functions for bit depth converters."""
 
+from typing import cast
+
 from src.config import BitDepth
 from src.processing.converters.protocols import BitDepthConverter
 from src.processing.converters.float32 import Float32Converter
@@ -23,7 +25,7 @@ def get_converter(bit_depth: BitDepth) -> BitDepthConverter:
         BitDepth.INT16: Int16Converter(),
         BitDepth.SOURCE: SourceConverter(),
     }
-    return converters[bit_depth]
+    return cast(BitDepthConverter, converters[bit_depth])
 
 
 def resolve_bit_depth(requested: BitDepth, source: BitDepth | None) -> BitDepth:

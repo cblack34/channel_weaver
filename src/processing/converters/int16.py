@@ -12,7 +12,7 @@ class Int16Converter:
 
     @property
     def numpy_dtype(self) -> np.dtype:
-        return np.int16
+        return np.dtype(np.int16)
 
     def convert(self, data: np.ndarray) -> np.ndarray:
         """Convert to 16-bit integer range."""

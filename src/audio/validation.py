@@ -75,6 +75,8 @@ class AudioValidator:
         # Convert subtype to BitDepth enum
         bit_depth = self._bit_depth_from_subtype(expected_subtype or "")
 
+        assert expected_rate is not None
+        assert expected_channels is not None
         return expected_rate, expected_channels, bit_depth
 
     def _bit_depth_from_subtype(self, subtype: str) -> BitDepth:
