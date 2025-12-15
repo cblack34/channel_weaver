@@ -111,7 +111,6 @@ class ConfigLoader:
             ConfigLoader instance initialized with YAML configuration
         """
         from src.config.yaml_source import YAMLConfigSource
-        
         source = YAMLConfigSource(config_path)
         return cls.from_source(
             source,
