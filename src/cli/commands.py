@@ -276,7 +276,6 @@ def validate_config(
     - Cross-reference validation (if --channels provided)
     """
     from src.config.yaml_source import YAMLConfigSource
-    
     console = Console()
     
     try:
