@@ -216,7 +216,6 @@ def init_config(
     for your specific multitrack setup.
     """
     from src.config.generator import ConfigGenerator
-    
     console = Console()
     
     # Determine output path
