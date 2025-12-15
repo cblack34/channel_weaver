@@ -216,7 +216,6 @@ def init_config(
     for your specific multitrack setup.
     """
     from src.config.generator import ConfigGenerator
-    
     console = Console()
     
     # Determine output path
@@ -277,7 +276,6 @@ def validate_config(
     - Cross-reference validation (if --channels provided)
     """
     from src.config.yaml_source import YAMLConfigSource
-    
     console = Console()
     
     try:
