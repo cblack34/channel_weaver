@@ -2,15 +2,17 @@
 
 import logging
 from pathlib import Path
+from typing import Annotated, Optional
 
 import typer
 from rich.console import Console
 
 from src.constants import VERSION
-from src.exceptions import ConfigError, AudioProcessingError
+from src.exceptions import ConfigError, AudioProcessingError, YAMLConfigError
 from src.audio.extractor import AudioExtractor
 from src.processing.builder import TrackBuilder
 from src.config import ConfigLoader, CHANNELS, BUSES, BitDepth
+from src.config.resolver import ConfigResolver
 from src.cli.utils import _sanitize_path, _ensure_output_path, _determine_temp_dir
 
 # Configure logging
@@ -33,38 +35,83 @@ def version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
-def main(
-        input_path: Path = typer.Argument(
-            ..., exists=True, file_okay=False, dir_okay=True, readable=True, resolve_path=True,
-            help="Directory containing sequential WAV files"
+def process(
+    input_path: Annotated[
+        Path,
+        typer.Argument(
+            exists=True,
+            file_okay=False,
+            dir_okay=True,
+            readable=True,
+            resolve_path=True,
+            help="Directory containing sequential WAV files",
         ),
-        output: Path | None = typer.Option(
-            None,
-            "--output",
-            "-o",
+    ],
+    output: Annotated[
+        Optional[Path],
+        typer.Option(
+            "--output", "-o",
             file_okay=False,
             dir_okay=True,
             resolve_path=True,
             help="Override the default output directory",
         ),
-        bit_depth: BitDepth = typer.Option(BitDepth.SOURCE, "--bit-depth",
-                                           help="Target bit depth for output files (source=preserve original)"),
-        temp_dir: Path | None = typer.Option(None, "--temp-dir", file_okay=False, dir_okay=True, resolve_path=True,
-                                                help="Custom temporary directory"),
-        keep_temp: bool = typer.Option(False, "--keep-temp", help="Keep temporary files instead of deleting them"),
-        version: bool = typer.Option(
-            None, "--version", "-v",
+    ] = None,
+    config: Annotated[
+        Optional[Path],
+        typer.Option(
+            "--config", "-c",
+            exists=True,
+            file_okay=True,
+            dir_okay=False,
+            readable=True,
+            resolve_path=True,
+            help="Path to YAML configuration file",
+        ),
+    ] = None,
+    bit_depth: Annotated[
+        BitDepth,
+        typer.Option(
+            "--bit-depth",
+            help="Target bit depth for output files (source=preserve original)",
+        ),
+    ] = BitDepth.SOURCE,
+    temp_dir: Annotated[
+        Optional[Path],
+        typer.Option(
+            "--temp-dir",
+            file_okay=False,
+            dir_okay=True,
+            resolve_path=True,
+            help="Custom temporary directory",
+        ),
+    ] = None,
+    keep_temp: Annotated[
+        bool,
+        typer.Option(
+            "--keep-temp",
+            help="Keep temporary files instead of deleting them",
+        ),
+    ] = False,
+    version: Annotated[
+        Optional[bool],
+        typer.Option(
+            "--version", "-v",
             callback=version_callback,
-            is_eager=True,  # Critical: process before other options
+            is_eager=True,
             is_flag=True,
-            help="Show version and exit."
+            help="Show version and exit.",
         ),
-        verbose: bool = typer.Option(
-            False, "--verbose",
-            help="Enable verbose debug output"
+    ] = None,
+    verbose: Annotated[
+        bool,
+        typer.Option(
+            "--verbose",
+            help="Enable verbose debug output",
         ),
+    ] = False,
 ) -> None:
-    """Process multitrack recordings according to the provided configuration."""
+    """Process multitrack recordings according to configuration."""
 
     # Configure logging level based on verbose flag
     if verbose:
@@ -94,8 +141,24 @@ def main(
         # Get detected channel count for ConfigLoader
         detected_channel_count = extractor.channels
 
-        # Load and validate configuration
-        config_loader = ConfigLoader(CHANNELS, BUSES, detected_channel_count=detected_channel_count)
+        # Resolve and load configuration
+        resolver = ConfigResolver(explicit_path=config)
+        config_path = resolver.resolve()
+        
+        if config_path is not None:
+            console.print(f"[dim]Using configuration: {config_path}[/dim]")
+            config_loader = ConfigLoader.from_yaml(
+                config_path,
+                detected_channel_count=detected_channel_count,
+            )
+        else:
+            # Use built-in defaults
+            config_loader = ConfigLoader(
+                CHANNELS,
+                BUSES,
+                detected_channel_count=detected_channel_count,
+            )
+        
         channels, buses = config_loader.load()
 
         # Extract segments
@@ -113,9 +176,135 @@ def main(
         )
         builder.build_tracks(channels, buses, segments)
 
-    except (ConfigError, AudioProcessingError) as e:
+    except (YAMLConfigError, ConfigError, AudioProcessingError) as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(code=1)
     finally:
         if not keep_temp and 'extractor' in locals():
             extractor.cleanup()
+
+
+def init_config(
+    output: Annotated[
+        Optional[Path],
+        typer.Option(
+            "--output", "-o",
+            file_okay=True,
+            dir_okay=False,
+            resolve_path=True,
+            help="Output path for the configuration file",
+        ),
+    ] = None,
+    minimal: Annotated[
+        bool,
+        typer.Option(
+            "--minimal", "-m",
+            help="Generate a minimal example configuration",
+        ),
+    ] = False,
+    force: Annotated[
+        bool,
+        typer.Option(
+            "--force", "-f",
+            help="Overwrite existing configuration file",
+        ),
+    ] = False,
+) -> None:
+    """Generate an example YAML configuration file.
+    
+    Creates a well-documented configuration file that you can customize
+    for your specific multitrack setup.
+    """
+    from src.config.generator import ConfigGenerator
+    console = Console()
+    
+    # Determine output path
+    output_path = output or ConfigResolver.get_default_path()
+    
+    # Check for existing file
+    if output_path.exists() and not force:
+        console.print(
+            f"[yellow]Configuration file already exists:[/yellow] {output_path}"
+        )
+        console.print("Use [bold]--force[/bold] to overwrite.")
+        raise typer.Exit(code=1)
+    
+    try:
+        if minimal:
+            ConfigGenerator.generate_minimal(output_path)
+        else:
+            generator = ConfigGenerator()
+            generator.generate(output_path)
+        
+        console.print(f"[green]Created configuration file:[/green] {output_path}")
+        console.print("\nEdit this file to customize your channel and bus settings.")
+        console.print("Then run: [bold]channel-weaver process <input_dir>[/bold]")
+        
+    except OSError as e:
+        console.print(f"[red]Failed to write configuration file:[/red] {e}")
+        raise typer.Exit(code=1)
+
+
+def validate_config(
+    config_path: Annotated[
+        Path,
+        typer.Argument(
+            exists=True,
+            file_okay=True,
+            dir_okay=False,
+            readable=True,
+            resolve_path=True,
+            help="Path to the configuration file to validate",
+        ),
+    ],
+    channel_count: Annotated[
+        Optional[int],
+        typer.Option(
+            "--channels", "-n",
+            min=1,
+            max=128,
+            help="Expected channel count (for full validation)",
+        ),
+    ] = None,
+) -> None:
+    """Validate a YAML configuration file.
+    
+    Checks the configuration file for:
+    - Valid YAML syntax
+    - Correct schema structure
+    - Valid channel and bus definitions
+    - Cross-reference validation (if --channels provided)
+    """
+    from src.config.yaml_source import YAMLConfigSource
+    console = Console()
+    
+    try:
+        # Load and parse YAML
+        source = YAMLConfigSource(config_path)
+        channels_data, buses_data, schema_version = source.load()
+        
+        console.print(f"[dim]Schema version: {schema_version}[/dim]")
+        console.print(f"[dim]Channels defined: {len(channels_data)}[/dim]")
+        console.print(f"[dim]Buses defined: {len(buses_data)}[/dim]")
+        
+        # Full validation through ConfigLoader
+        config_loader = ConfigLoader(
+            channels_data,  # type: ignore[arg-type]
+            buses_data,  # type: ignore[arg-type]
+            detected_channel_count=channel_count,
+        )
+        channels, buses = config_loader.load()
+        
+        console.print("\n[green]✓ Configuration is valid[/green]")
+        console.print(f"  Channels: {len(channels)}")
+        console.print(f"  Buses: {len(buses)}")
+        
+        if channel_count:
+            console.print(f"  Validated against {channel_count} channels")
+        
+    except YAMLConfigError as e:
+        console.print(f"[red]✗ Configuration error:[/red] {e}")
+        raise typer.Exit(code=1)
+    except ConfigError as e:
+        console.print(f"[red]✗ Validation error:[/red] {e}")
+        raise typer.Exit(code=1)

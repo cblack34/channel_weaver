@@ -1,9 +1,11 @@
 """Configuration loader for Channel Weaver."""
 
+from pathlib import Path
 from typing import Iterable
 
 from src.config.models import ChannelConfig, BusConfig, ChannelAction
 from src.config.validators import ChannelValidator, BusValidator
+from src.config.protocols import ConfigSource
 from src.exceptions import ConfigValidationError
 from src.config.types import ChannelData, BusData
 
@@ -50,6 +52,71 @@ class ConfigLoader:
         )
         self._bus_validator = bus_validator or (
             BusValidator(detected_channel_count) if detected_channel_count is not None else None
+        )
+
+    @classmethod
+    def from_source(
+        cls,
+        source: ConfigSource,
+        *,
+        detected_channel_count: int | None = None,
+        channel_validator: ChannelValidator | None = None,
+        bus_validator: BusValidator | None = None,
+    ) -> "ConfigLoader":
+        """Create a ConfigLoader from any ConfigSource implementation.
+
+        This factory method follows the Dependency Inversion Principle,
+        accepting any implementation of the ConfigSource protocol.
+
+        Args:
+            source: Configuration source implementing ConfigSource protocol
+            detected_channel_count: Number of channels detected in input audio
+            channel_validator: Custom channel validator (uses default if None)
+            bus_validator: Custom bus validator (uses default if None)
+
+        Returns:
+            ConfigLoader instance initialized from the source
+        """
+        channels_data, buses_data, schema_version = source.load()
+
+        return cls(
+            channels_data=channels_data,  # type: ignore[arg-type]
+            buses_data=buses_data,  # type: ignore[arg-type]
+            detected_channel_count=detected_channel_count,
+            channel_validator=channel_validator,
+            bus_validator=bus_validator,
+        )
+
+    @classmethod
+    def from_yaml(
+        cls,
+        config_path: Path,
+        *,
+        detected_channel_count: int | None = None,
+        channel_validator: ChannelValidator | None = None,
+        bus_validator: BusValidator | None = None,
+    ) -> "ConfigLoader":
+        """Create a ConfigLoader from a YAML configuration file.
+
+        Convenience method that creates a YAMLConfigSource and delegates
+        to from_source().
+
+        Args:
+            config_path: Path to the YAML configuration file
+            detected_channel_count: Number of channels detected in input audio
+            channel_validator: Custom channel validator (uses default if None)
+            bus_validator: Custom bus validator (uses default if None)
+
+        Returns:
+            ConfigLoader instance initialized with YAML configuration
+        """
+        from src.config.yaml_source import YAMLConfigSource
+        source = YAMLConfigSource(config_path)
+        return cls.from_source(
+            source,
+            detected_channel_count=detected_channel_count,
+            channel_validator=channel_validator,
+            bus_validator=bus_validator,
         )
 
     def load(self) -> tuple[list[ChannelConfig], list[BusConfig]]:

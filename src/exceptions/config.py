@@ -89,3 +89,15 @@ class BusChannelConflictError(ConfigError):
             f"Channel {ch} is used in a bus but configured to PROCESS or SKIP. Set its action to BUS or remove it from buses."
         )
         self.ch = ch
+
+
+class YAMLConfigError(ConfigValidationError):
+    """Exception raised for YAML configuration file errors.
+    
+    This includes:
+    - File not found
+    - YAML parsing errors
+    - Invalid structure (missing sections, wrong types)
+    - Unsupported schema version
+    """
+    pass

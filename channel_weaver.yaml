@@ -1,0 +1,142 @@
+# Channel Weaver Configuration File
+# ===================================
+#
+# This file defines how input audio channels are processed and combined.
+#
+# CHANNELS SECTION
+# ----------------
+# Each channel entry defines processing for an input channel:
+#
+#   ch:        (required) Input channel number (1-32, 1-based indexing)
+#   name:      (required) Display name for the channel (used in output filenames)
+#   action:    (optional) Processing action - one of:
+#              - PROCESS: Extract and output as individual mono file (default)
+#              - SKIP: Ignore this channel entirely
+#              - BUS: Reserve for stereo bus mixing (don't output individually)
+#   output_ch: (optional) Override output channel number in filename
+#              Defaults to the input channel number (ch)
+#
+# Any channels not listed here will be auto-created with action=PROCESS
+# and name="Channel N" where N is the channel number.
+#
+# BUSES SECTION
+# -------------
+# Each bus entry combines multiple channels into a stereo output:
+#
+#   file_name: (required) Output filename (without .wav extension)
+#   type:      (optional) Bus type - currently only STEREO supported
+#   slots:     (required) Mapping of slot positions to input channels:
+#              - LEFT: Channel number for left audio
+#              - RIGHT: Channel number for right audio
+#
+# Channels assigned to buses should have action=BUS to avoid duplicate output.
+#
+# Example with all options:
+#
+#   channels:
+#     - ch: 1
+#       name: Kick
+#       action: PROCESS
+#     - ch: 7
+#       name: Overhead L
+#       action: BUS
+#
+#   buses:
+#     - file_name: 07_Overheads
+#       type: STEREO
+#       slots:
+#         LEFT: 7
+#         RIGHT: 8
+
+schema_version: 1
+channels:
+- ch: 1
+  name: Kick
+- ch: 2
+  name: Snare Top
+  action: SKIP
+- ch: 21
+  name: Snare Top
+  output_ch: 2
+- ch: 3
+  name: Hi-Hat
+- ch: 4
+  name: Tom 1
+- ch: 5
+  name: Tom 2
+- ch: 6
+  name: Snare Bottom
+- ch: 7
+  name: Overhead L
+  action: BUS
+- ch: 8
+  name: Overhead R
+  action: BUS
+- ch: 9
+  name: Bass
+- ch: 10
+  name: AG
+- ch: 11
+  name: EG 1
+- ch: 12
+  name: EG 2
+- ch: 13
+  name: Keys
+- ch: 14
+  name: Vox 1
+- ch: 15
+  name: Vox 2
+- ch: 16
+  name: Vox 3
+- ch: 17
+  name: Click
+- ch: 18
+  name: Guide
+- ch: 19
+  name: Loop Left
+  action: BUS
+- ch: 20
+  name: Loop Right
+  action: BUS
+- ch: 22
+  name: Audience Right
+  action: SKIP
+- ch: 23
+  name: HandHeld
+- ch: 24
+  name: HeadSet
+- ch: 25
+  name: blank
+  action: SKIP
+- ch: 26
+  name: blank
+  action: SKIP
+- ch: 27
+  name: blank
+  action: SKIP
+- ch: 28
+  name: blank
+  action: SKIP
+- ch: 29
+  name: blank
+  action: SKIP
+- ch: 30
+  name: blank
+  action: SKIP
+- ch: 31
+  name: blank
+  action: SKIP
+- ch: 32
+  name: blank
+  action: SKIP
+buses:
+- file_name: 07_Overheads
+  type: STEREO
+  slots:
+    LEFT: 7
+    RIGHT: 8
+- file_name: 19_Loop
+  type: STEREO
+  slots:
+    LEFT: 19
+    RIGHT: 20

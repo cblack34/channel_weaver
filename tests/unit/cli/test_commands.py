@@ -8,7 +8,7 @@ from unittest.mock import patch
 import pytest
 from pytest_mock import MockerFixture
 
-from src.cli.commands import version_callback, main
+from src.cli.commands import version_callback, process, init_config, validate_config
 from src.config.enums import BitDepth
 
 
@@ -54,6 +54,16 @@ class TestMainCommand:
         mocks["config_loader"] = mocker.patch("src.cli.commands.ConfigLoader")
         mocks["builder"] = mocker.patch("src.cli.commands.TrackBuilder")
 
+        # Mock ConfigResolver to return None (use defaults path)
+        # This ensures tests use the constructor path instead of from_yaml
+        mocks["config_resolver"] = mocker.patch("src.cli.commands.ConfigResolver")
+        mocks["config_resolver"].return_value.resolve.return_value = None
+
+        # Configure default return values for ConfigLoader paths
+        # Both constructor and from_yaml() classmethod need to return instances with load() method
+        mocks["config_loader"].return_value.load.return_value = ([], [])
+        mocks["config_loader"].from_yaml.return_value.load.return_value = ([], [])
+
         # Mock console
         mocks["console"] = mocker.patch("src.cli.commands.Console")
 
@@ -96,7 +106,7 @@ class TestMainCommand:
         mock_builder_instance.build_tracks.return_value = None
 
         # Execute main command
-        main(
+        process(
             input_path=input_path,
             output=None,
             bit_depth=BitDepth.INT16,
@@ -170,7 +180,7 @@ class TestMainCommand:
             mock_extractor_class.side_effect = Exception("Stop execution")
 
             with pytest.raises(Exception, match="Stop execution"):
-                main(
+                process(
                     input_path=tmp_path / "input",
                     output=None,
                     bit_depth=BitDepth.FLOAT32,
@@ -211,7 +221,7 @@ class TestMainCommand:
         mock_exit.side_effect = SystemExit(1)
 
         with pytest.raises(SystemExit):
-            main(
+            process(
                 input_path=tmp_path / "input",
                 output=None,
                 bit_depth=BitDepth.INT24,
@@ -258,7 +268,7 @@ class TestMainCommand:
         mock_exit.side_effect = SystemExit(1)
 
         with pytest.raises(SystemExit):
-            main(
+            process(
                 input_path=tmp_path / "input",
                 output=None,
                 bit_depth=BitDepth.SOURCE,
@@ -304,7 +314,7 @@ class TestMainCommand:
         mock_exit.side_effect = SystemExit(1)
 
         with pytest.raises(SystemExit):
-            main(
+            process(
                 input_path=tmp_path / "input",
                 output=None,
                 bit_depth=BitDepth.FLOAT32,
@@ -338,7 +348,7 @@ class TestMainCommand:
         mocks["config_loader"].return_value.load.return_value = ([], [])
 
         # Execute with keep_temp=True
-        main(
+        process(
             input_path=tmp_path / "input",
             output=None,
             bit_depth=BitDepth.INT16,
@@ -350,3 +360,411 @@ class TestMainCommand:
 
         # Verify cleanup was NOT called
         mock_extractor_instance.cleanup.assert_not_called()
+
+
+class TestInitConfigCommand:
+    """Tests for init_config command function."""
+
+    def test_init_config_default_output(
+        self,
+        tmp_path: Path,
+        mocker: MockerFixture,
+    ) -> None:
+        """Test successful config generation to default location."""
+        output_file = tmp_path / "config.yaml"
+        
+        # Mock ConfigResolver to return our test path
+        mock_resolver = mocker.patch("src.cli.commands.ConfigResolver")
+        mock_resolver.get_default_path.return_value = output_file
+        
+        # Mock ConfigGenerator
+        mock_generator_class = mocker.patch("src.config.generator.ConfigGenerator")
+        mock_generator_instance = mock_generator_class.return_value
+        mock_generator_instance.generate.return_value = None
+        
+        # Mock Console
+        mock_console_class = mocker.patch("src.cli.commands.Console")
+        mock_console = mock_console_class.return_value
+        
+        # Execute command
+        init_config(output=None, minimal=False, force=False)
+        
+        # Verify generator was called
+        mock_generator_class.assert_called_once()
+        mock_generator_instance.generate.assert_called_once_with(output_file)
+        
+        # Verify success messages (3 print calls)
+        assert mock_console.print.call_count == 3
+        first_call = str(mock_console.print.call_args_list[0][0][0])
+        assert "Created configuration file" in first_call
+        assert str(output_file) in first_call
+
+    def test_init_config_custom_output(
+        self,
+        tmp_path: Path,
+        mocker: MockerFixture,
+    ) -> None:
+        """Test config generation to custom location."""
+        output_file = tmp_path / "custom" / "myconfig.yaml"
+        
+        # Mock ConfigGenerator
+        mock_generator_class = mocker.patch("src.config.generator.ConfigGenerator")
+        mock_generator_instance = mock_generator_class.return_value
+        
+        # Mock Console
+        mock_console_class = mocker.patch("src.cli.commands.Console")
+        mock_console = mock_console_class.return_value
+        
+        # Execute command
+        init_config(output=output_file, minimal=False, force=False)
+        
+        # Verify generator was called with custom path
+        mock_generator_instance.generate.assert_called_once_with(output_file)
+        
+        # Verify success message in first print call
+        assert mock_console.print.call_count == 3
+        first_call = str(mock_console.print.call_args_list[0][0][0])
+        assert str(output_file) in first_call
+
+    def test_init_config_minimal_format(
+        self,
+        tmp_path: Path,
+        mocker: MockerFixture,
+    ) -> None:
+        """Test minimal config generation."""
+        output_file = tmp_path / "minimal.yaml"
+        
+        # Mock ConfigResolver
+        mock_resolver = mocker.patch("src.cli.commands.ConfigResolver")
+        mock_resolver.get_default_path.return_value = output_file
+        
+        # Mock ConfigGenerator
+        mock_generator_class = mocker.patch("src.config.generator.ConfigGenerator")
+        
+        # Mock Console
+        mocker.patch("src.cli.commands.Console")
+        
+        # Execute command with minimal flag
+        init_config(output=None, minimal=True, force=False)
+        
+        # Verify generate_minimal was called
+        mock_generator_class.generate_minimal.assert_called_once_with(output_file)
+
+    def test_init_config_file_exists_no_force(
+        self,
+        tmp_path: Path,
+        mocker: MockerFixture,
+    ) -> None:
+        """Test that existing file prevents overwrite without --force."""
+        output_file = tmp_path / "existing.yaml"
+        output_file.touch()  # Create the file
+        
+        # Mock ConfigResolver
+        mock_resolver = mocker.patch("src.cli.commands.ConfigResolver")
+        mock_resolver.get_default_path.return_value = output_file
+        
+        # Mock Console
+        mock_console_class = mocker.patch("src.cli.commands.Console")
+        mock_console = mock_console_class.return_value
+        
+        # Mock typer.Exit
+        mock_exit = mocker.patch("src.cli.commands.typer.Exit")
+        mock_exit.side_effect = SystemExit(1)
+        
+        # Execute command - should exit
+        with pytest.raises(SystemExit):
+            init_config(output=None, minimal=False, force=False)
+        
+        # Verify error messages
+        assert mock_console.print.call_count == 2
+        first_call = str(mock_console.print.call_args_list[0][0][0])
+        second_call = str(mock_console.print.call_args_list[1][0][0])
+        
+        assert "already exists" in first_call
+        assert "--force" in second_call
+        mock_exit.assert_called_once_with(code=1)
+
+    def test_init_config_file_exists_with_force(
+        self,
+        tmp_path: Path,
+        mocker: MockerFixture,
+    ) -> None:
+        """Test that existing file is overwritten with --force."""
+        output_file = tmp_path / "existing.yaml"
+        output_file.write_text("old content")
+        
+        # Mock ConfigResolver
+        mock_resolver = mocker.patch("src.cli.commands.ConfigResolver")
+        mock_resolver.get_default_path.return_value = output_file
+        
+        # Mock ConfigGenerator
+        mock_generator_class = mocker.patch("src.config.generator.ConfigGenerator")
+        mock_generator_instance = mock_generator_class.return_value
+        
+        # Mock Console
+        mocker.patch("src.cli.commands.Console")
+        
+        # Execute command with force
+        init_config(output=None, minimal=False, force=True)
+        
+        # Verify generator was called (file should be overwritten)
+        mock_generator_instance.generate.assert_called_once_with(output_file)
+
+    def test_init_config_os_error_handling(
+        self,
+        tmp_path: Path,
+        mocker: MockerFixture,
+    ) -> None:
+        """Test handling of OS errors during file writing."""
+        output_file = tmp_path / "config.yaml"
+        
+        # Mock ConfigResolver
+        mock_resolver = mocker.patch("src.cli.commands.ConfigResolver")
+        mock_resolver.get_default_path.return_value = output_file
+        
+        # Mock ConfigGenerator to raise OSError
+        mock_generator_class = mocker.patch("src.config.generator.ConfigGenerator")
+        mock_generator_instance = mock_generator_class.return_value
+        mock_generator_instance.generate.side_effect = OSError("Permission denied")
+        
+        # Mock Console
+        mock_console_class = mocker.patch("src.cli.commands.Console")
+        mock_console = mock_console_class.return_value
+        
+        # Mock typer.Exit
+        mock_exit = mocker.patch("src.cli.commands.typer.Exit")
+        mock_exit.side_effect = SystemExit(1)
+        
+        # Execute command - should handle error
+        with pytest.raises(SystemExit):
+            init_config(output=None, minimal=False, force=False)
+        
+        # Verify error message
+        mock_console.print.assert_called_once()
+        error_msg = str(mock_console.print.call_args[0][0])
+        assert "Failed to write configuration file" in error_msg
+        assert "Permission denied" in error_msg
+        mock_exit.assert_called_once_with(code=1)
+
+
+class TestValidateConfigCommand:
+    """Tests for validate_config command function."""
+
+    def test_validate_config_success_no_channel_count(
+        self,
+        tmp_path: Path,
+        mocker: MockerFixture,
+    ) -> None:
+        """Test successful validation without channel count."""
+        config_file = tmp_path / "valid.yaml"
+        
+        # Mock YAMLConfigSource
+        mock_source_class = mocker.patch("src.config.yaml_source.YAMLConfigSource")
+        mock_source = mock_source_class.return_value
+        mock_source.load.return_value = (
+            [{"ch": 1, "name": "Channel_1", "action": "BUS"}],
+            [{"file_name": "01_Master", "type": "STEREO", "slots": {"LEFT": 1, "RIGHT": 1}}],
+            1,  # schema_version
+        )
+        
+        # Mock ConfigLoader - need to mock both the class and instance
+        mock_loader_class = mocker.patch("src.cli.commands.ConfigLoader")
+        mock_loader = mock_loader_class.return_value
+        # Return actual model instances
+        from src.config.models import ChannelConfig, BusConfig
+        from src.config.enums import BusSlot, ChannelAction
+        mock_loader.load.return_value = (
+            [ChannelConfig(ch=1, name="Channel_1", action=ChannelAction.BUS)],
+            [BusConfig(file_name="01_Master", type="STEREO", slots={BusSlot.LEFT: 1, BusSlot.RIGHT: 1})],
+        )
+        
+        # Mock Console
+        mock_console_class = mocker.patch("src.cli.commands.Console")
+        mock_console = mock_console_class.return_value
+        
+        # Execute command
+        validate_config(config_path=config_file, channel_count=None)
+        
+        # Verify YAMLConfigSource was created
+        mock_source_class.assert_called_once_with(config_file)
+        mock_source.load.assert_called_once()
+        
+        # Verify ConfigLoader was created without detected_channel_count
+        mock_loader_class.assert_called_once()
+        call_kwargs = mock_loader_class.call_args[1]
+        assert call_kwargs["detected_channel_count"] is None
+        
+        # Verify success message
+        print_calls = [str(call[0][0]) for call in mock_console.print.call_args_list]
+        assert any("Configuration is valid" in call for call in print_calls)
+
+    def test_validate_config_success_with_channel_count(
+        self,
+        tmp_path: Path,
+        mocker: MockerFixture,
+    ) -> None:
+        """Test successful validation with channel count."""
+        config_file = tmp_path / "valid.yaml"
+        
+        # Mock YAMLConfigSource
+        mock_source_class = mocker.patch("src.config.yaml_source.YAMLConfigSource")
+        mock_source = mock_source_class.return_value
+        # Channels 1-2 are in bus (action=BUS), rest are PROCESS
+        channels_data = [{"ch": 1, "name": "Ch_1", "action": "BUS"}, {"ch": 2, "name": "Ch_2", "action": "BUS"}]
+        channels_data.extend([{"ch": i, "name": f"Ch_{i}", "action": "PROCESS"} for i in range(3, 9)])
+        mock_source.load.return_value = (
+            channels_data,
+            [{"file_name": "01_Master", "type": "STEREO", "slots": {"LEFT": 1, "RIGHT": 2}}],
+            1,
+        )
+        
+        # Mock ConfigLoader
+        mock_loader_class = mocker.patch("src.cli.commands.ConfigLoader")
+        mock_loader = mock_loader_class.return_value
+        # Return actual model instances
+        from src.config.models import ChannelConfig, BusConfig
+        from src.config.enums import BusSlot, ChannelAction
+        bus_channels = [ChannelConfig(ch=1, name="Ch_1", action=ChannelAction.BUS), ChannelConfig(ch=2, name="Ch_2", action=ChannelAction.BUS)]
+        process_channels = [ChannelConfig(ch=i, name=f"Ch_{i}") for i in range(3, 9)]
+        mock_loader.load.return_value = (
+            bus_channels + process_channels,
+            [BusConfig(file_name="01_Master", type="STEREO", slots={BusSlot.LEFT: 1, BusSlot.RIGHT: 2})],
+        )
+        
+        # Mock Console
+        mock_console_class = mocker.patch("src.cli.commands.Console")
+        mock_console = mock_console_class.return_value
+        
+        # Execute command with channel count
+        validate_config(config_path=config_file, channel_count=8)
+        
+        # Verify ConfigLoader was created with detected_channel_count
+        call_kwargs = mock_loader_class.call_args[1]
+        assert call_kwargs["detected_channel_count"] == 8
+        
+        # Verify validation message includes channel count
+        print_calls = [str(call[0][0]) for call in mock_console.print.call_args_list]
+        assert any("Validated against 8 channels" in call for call in print_calls)
+
+    def test_validate_config_yaml_error(
+        self,
+        tmp_path: Path,
+        mocker: MockerFixture,
+    ) -> None:
+        """Test handling of YAML syntax errors."""
+        config_file = tmp_path / "invalid.yaml"
+        
+        # Mock YAMLConfigSource to raise YAMLConfigError
+        from src.exceptions import YAMLConfigError
+        mock_source_class = mocker.patch("src.config.yaml_source.YAMLConfigSource")
+        mock_source = mock_source_class.return_value
+        mock_source.load.side_effect = YAMLConfigError("Invalid YAML syntax")
+        
+        # Mock Console
+        mock_console_class = mocker.patch("src.cli.commands.Console")
+        mock_console = mock_console_class.return_value
+        
+        # Mock typer.Exit
+        mock_exit = mocker.patch("src.cli.commands.typer.Exit")
+        mock_exit.side_effect = SystemExit(1)
+        
+        # Execute command - should handle error
+        with pytest.raises(SystemExit):
+            validate_config(config_path=config_file, channel_count=None)
+        
+        # Verify error message
+        mock_console.print.assert_called()
+        error_msg = str(mock_console.print.call_args[0][0])
+        assert "Configuration error" in error_msg
+        assert "Invalid YAML syntax" in error_msg
+        mock_exit.assert_called_once_with(code=1)
+
+    def test_validate_config_validation_error(
+        self,
+        tmp_path: Path,
+        mocker: MockerFixture,
+    ) -> None:
+        """Test handling of configuration validation errors."""
+        config_file = tmp_path / "invalid.yaml"
+        
+        # Mock YAMLConfigSource
+        mock_source_class = mocker.patch("src.config.yaml_source.YAMLConfigSource")
+        mock_source = mock_source_class.return_value
+        mock_source.load.return_value = (
+            [{"ch": 1, "name": "Channel_1", "action": "PROCESS"}],
+            [{"file_name": "01_Master", "type": "STEREO", "slots": {"LEFT": 99, "RIGHT": 99}}],  # Invalid channel reference
+            1,
+        )
+        
+        # Mock ConfigLoader to raise ConfigError
+        from src.exceptions import ConfigError
+        mock_loader_class = mocker.patch("src.cli.commands.ConfigLoader")
+        mock_loader = mock_loader_class.return_value
+        mock_loader.load.side_effect = ConfigError("Channel 99 referenced in bus but not defined")
+        
+        # Mock Console
+        mock_console_class = mocker.patch("src.cli.commands.Console")
+        mock_console = mock_console_class.return_value
+        
+        # Mock typer.Exit
+        mock_exit = mocker.patch("src.cli.commands.typer.Exit")
+        mock_exit.side_effect = SystemExit(1)
+        
+        # Execute command - should handle error
+        with pytest.raises(SystemExit):
+            validate_config(config_path=config_file, channel_count=None)
+        
+        # Verify error message
+        error_msg = str(mock_console.print.call_args[0][0])
+        assert "Validation error" in error_msg
+        assert "Channel 99" in error_msg or "Invalid bus configuration" in error_msg
+        mock_exit.assert_called_once_with(code=1)
+
+    def test_validate_config_displays_schema_info(
+        self,
+        tmp_path: Path,
+        mocker: MockerFixture,
+    ) -> None:
+        """Test that validation displays schema information."""
+        config_file = tmp_path / "config.yaml"
+        
+        # Mock YAMLConfigSource
+        mock_source_class = mocker.patch("src.config.yaml_source.YAMLConfigSource")
+        mock_source = mock_source_class.return_value
+        # Channels 1-4 are in buses (action=BUS), rest are PROCESS
+        channels_data = [
+            {"ch": 1, "name": "Ch_1", "action": "BUS"}, {"ch": 2, "name": "Ch_2", "action": "BUS"},
+            {"ch": 3, "name": "Ch_3", "action": "BUS"}, {"ch": 4, "name": "Ch_4", "action": "BUS"},
+        ]
+        channels_data.extend([{"ch": i, "name": f"Ch_{i}", "action": "PROCESS"} for i in range(5, 17)])
+        mock_source.load.return_value = (
+            channels_data,
+            [{"file_name": "01_Bus1", "type": "STEREO", "slots": {"LEFT": 1, "RIGHT": 2}}, {"file_name": "02_Bus2", "type": "STEREO", "slots": {"LEFT": 3, "RIGHT": 4}}],
+            2,  # schema_version
+        )
+        
+        # Mock ConfigLoader
+        mock_loader_class = mocker.patch("src.cli.commands.ConfigLoader")
+        mock_loader = mock_loader_class.return_value
+        # Return actual model instances
+        from src.config.models import ChannelConfig, BusConfig
+        from src.config.enums import BusSlot, ChannelAction
+        bus_channels = [ChannelConfig(ch=i, name=f"Ch_{i}", action=ChannelAction.BUS) for i in range(1, 5)]
+        process_channels = [ChannelConfig(ch=i, name=f"Ch_{i}") for i in range(5, 17)]
+        mock_loader.load.return_value = (
+            bus_channels + process_channels,
+            [BusConfig(file_name="01_Bus1", type="STEREO", slots={BusSlot.LEFT: 1, BusSlot.RIGHT: 2}), BusConfig(file_name="02_Bus2", type="STEREO", slots={BusSlot.LEFT: 3, BusSlot.RIGHT: 4})],
+        )
+        
+        # Mock Console
+        mock_console_class = mocker.patch("src.cli.commands.Console")
+        mock_console = mock_console_class.return_value
+        
+        # Execute command
+        validate_config(config_path=config_file, channel_count=16)
+        
+        # Verify schema info was printed
+        print_calls = [str(call[0][0]) for call in mock_console.print.call_args_list]
+        assert any("Schema version: 2" in call for call in print_calls)
+        assert any("Channels defined: 16" in call for call in print_calls)
+        assert any("Buses defined: 2" in call for call in print_calls)

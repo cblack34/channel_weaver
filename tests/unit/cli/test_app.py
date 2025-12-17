@@ -20,43 +20,43 @@ class TestAppConfiguration:
         assert len(app.registered_commands) > 0
 
     def test_app_has_main_command(self) -> None:
-        """Test that app has the main command registered."""
-        # The main command should be registered
+        """Test that app has the process command registered."""
+        # The process command should be registered
         command_names = [cmd.name for cmd in app.registered_commands if hasattr(cmd, 'name')]
         callback_names = [cmd.callback.__name__ for cmd in app.registered_commands if hasattr(cmd, 'callback')]  # type: ignore[union-attr]
 
-        # Either the command is named 'main' or has a callback named 'main'
-        assert "main" in command_names or "main" in callback_names
+        # Either the command is named 'process' or has a callback named 'process'
+        assert "process" in command_names or "process" in callback_names
 
     def test_app_command_callback_exists(self) -> None:
-        """Test that the main command has proper callback."""
-        # Find the main command
-        main_command = None
+        """Test that the process command has proper callback."""
+        # Find the process command
+        process_command = None
         for cmd in app.registered_commands:
-            if (hasattr(cmd, 'name') and cmd.name == "main") or \
-               (hasattr(cmd, 'callback') and cmd.callback.__name__ == "main"):  # type: ignore[union-attr]
-                main_command = cmd
+            if (hasattr(cmd, 'name') and cmd.name == "process") or \
+               (hasattr(cmd, 'callback') and cmd.callback.__name__ == "process"):  # type: ignore[union-attr]
+                process_command = cmd
                 break
 
-        assert main_command is not None
-        assert hasattr(main_command, 'callback')
-        assert main_command.callback is not None
+        assert process_command is not None
+        assert hasattr(process_command, 'callback')
+        assert process_command.callback is not None
 
     def test_app_callback_is_main_function(self) -> None:
         """Test that the callback is the main function."""
         # Find the main command callback
         callback = None
         for cmd in app.registered_commands:
-            if hasattr(cmd, 'callback') and cmd.callback.__name__ == "main":  # type: ignore[union-attr]
+            if hasattr(cmd, 'callback') and cmd.callback.__name__ == "process":  # type: ignore[union-attr]
                 callback = cmd.callback
                 break
 
         assert callback is not None
-        assert callback.__name__ == "main"
+        assert callback.__name__ == "process"
 
-        # Import main function to verify it's the same
-        from src.cli.commands import main as main_func
-        assert callback is main_func
+        # Import process function to verify it's the same
+        from src.cli.commands import process as process_func
+        assert callback is process_func
 
     def test_app_imports(self) -> None:
         """Test that app imports are working correctly."""
