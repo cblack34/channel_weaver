@@ -54,10 +54,6 @@ channels:
   name: Kick
 - ch: 2
   name: Snare Top
-  action: SKIP
-- ch: 21
-  name: Snare Top
-  output_ch: 2
 - ch: 3
   name: Hi-Hat
 - ch: 4
@@ -98,9 +94,12 @@ channels:
 - ch: 20
   name: Loop Right
   action: BUS
+- ch: 21
+  name: Audience Left
+  action: BUS
 - ch: 22
   name: Audience Right
-  action: SKIP
+  action: BUS
 - ch: 23
   name: HandHeld
 - ch: 24
@@ -140,3 +139,8 @@ buses:
   slots:
     LEFT: 19
     RIGHT: 20
+- file_name: 21_Audience
+  type: STEREO
+  slots:
+    LEFT: 21
+    RIGHT: 22
