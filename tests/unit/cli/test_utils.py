@@ -39,7 +39,7 @@ class TestDefaultOutputDir:
         input_path.mkdir()
 
         result = _default_output_dir(input_path)
-        expected = tmp_path / "input_folder_processed"
+        expected = tmp_path / "processed"
 
         assert result == expected
         assert not result.exists()
@@ -50,11 +50,11 @@ class TestDefaultOutputDir:
         input_path.mkdir()
 
         # Create the default output directory
-        conflict_dir = tmp_path / "input_folder_processed"
+        conflict_dir = tmp_path / "processed"
         conflict_dir.mkdir()
 
         result = _default_output_dir(input_path)
-        expected = tmp_path / "input_folder_processed_v2"
+        expected = tmp_path / "processed_v2"
 
         assert result == expected
 
@@ -64,12 +64,12 @@ class TestDefaultOutputDir:
         input_path.mkdir()
 
         # Create multiple conflicting directories
-        (tmp_path / "input_folder_processed").mkdir()
-        (tmp_path / "input_folder_processed_v2").mkdir()
-        (tmp_path / "input_folder_processed_v3").mkdir()
+        (tmp_path / "processed").mkdir()
+        (tmp_path / "processed_v2").mkdir()
+        (tmp_path / "processed_v3").mkdir()
 
         result = _default_output_dir(input_path)
-        expected = tmp_path / "input_folder_processed_v4"
+        expected = tmp_path / "processed_v4"
 
         assert result == expected
 
@@ -91,7 +91,7 @@ class TestEnsureOutputPath:
         input_path.mkdir()
 
         result = _ensure_output_path(input_path, None)
-        expected = tmp_path / "input_folder_processed"
+        expected = tmp_path / "processed"
 
         assert result == expected
 

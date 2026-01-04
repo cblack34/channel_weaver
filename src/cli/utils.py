@@ -13,7 +13,7 @@ def _default_output_dir(input_path: Path) -> Path:
     """Return a conflict-free default output directory for the given input folder."""
 
     base_dir = input_path.parent
-    base_name = f"{input_path.name}_processed"
+    base_name = "processed"
     candidate = base_dir / base_name
 
     suffix = 2
