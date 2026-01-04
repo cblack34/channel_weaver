@@ -572,10 +572,10 @@ class TestValidateConfigCommand:
         mock_loader = mock_loader_class.return_value
         # Return actual model instances
         from src.config.models import ChannelConfig, BusConfig
-        from src.config.enums import BusSlot, ChannelAction
+        from src.config.enums import BusSlot, ChannelAction, BusType
         mock_loader.load.return_value = (
-            [ChannelConfig(ch=1, name="Channel_1", action=ChannelAction.BUS)],
-            [BusConfig(file_name="01_Master", type="STEREO", slots={BusSlot.LEFT: 1, BusSlot.RIGHT: 1})],
+            [ChannelConfig(ch=1, name="Channel_1", action=ChannelAction.BUS, output_ch=None)],
+            [BusConfig(file_name="01_Master", type=BusType.STEREO, slots={BusSlot.LEFT: 1, BusSlot.RIGHT: 1})],
         )
         
         # Mock Console
@@ -623,12 +623,12 @@ class TestValidateConfigCommand:
         mock_loader = mock_loader_class.return_value
         # Return actual model instances
         from src.config.models import ChannelConfig, BusConfig
-        from src.config.enums import BusSlot, ChannelAction
-        bus_channels = [ChannelConfig(ch=1, name="Ch_1", action=ChannelAction.BUS), ChannelConfig(ch=2, name="Ch_2", action=ChannelAction.BUS)]
-        process_channels = [ChannelConfig(ch=i, name=f"Ch_{i}") for i in range(3, 9)]
+        from src.config.enums import BusSlot, ChannelAction, BusType
+        bus_channels = [ChannelConfig(ch=1, name="Ch_1", action=ChannelAction.BUS, output_ch=None), ChannelConfig(ch=2, name="Ch_2", action=ChannelAction.BUS, output_ch=None)]
+        process_channels = [ChannelConfig(ch=i, name=f"Ch_{i}", output_ch=None) for i in range(3, 9)]
         mock_loader.load.return_value = (
             bus_channels + process_channels,
-            [BusConfig(file_name="01_Master", type="STEREO", slots={BusSlot.LEFT: 1, BusSlot.RIGHT: 2})],
+            [BusConfig(file_name="01_Master", type=BusType.STEREO, slots={BusSlot.LEFT: 1, BusSlot.RIGHT: 2})],
         )
         
         # Mock Console
@@ -748,12 +748,12 @@ class TestValidateConfigCommand:
         mock_loader = mock_loader_class.return_value
         # Return actual model instances
         from src.config.models import ChannelConfig, BusConfig
-        from src.config.enums import BusSlot, ChannelAction
-        bus_channels = [ChannelConfig(ch=i, name=f"Ch_{i}", action=ChannelAction.BUS) for i in range(1, 5)]
-        process_channels = [ChannelConfig(ch=i, name=f"Ch_{i}") for i in range(5, 17)]
+        from src.config.enums import BusSlot, ChannelAction, BusType
+        bus_channels = [ChannelConfig(ch=i, name=f"Ch_{i}", action=ChannelAction.BUS, output_ch=None) for i in range(1, 5)]
+        process_channels = [ChannelConfig(ch=i, name=f"Ch_{i}", output_ch=None) for i in range(5, 17)]
         mock_loader.load.return_value = (
             bus_channels + process_channels,
-            [BusConfig(file_name="01_Bus1", type="STEREO", slots={BusSlot.LEFT: 1, BusSlot.RIGHT: 2}), BusConfig(file_name="02_Bus2", type="STEREO", slots={BusSlot.LEFT: 3, BusSlot.RIGHT: 4})],
+            [BusConfig(file_name="01_Bus1", type=BusType.STEREO, slots={BusSlot.LEFT: 1, BusSlot.RIGHT: 2}), BusConfig(file_name="02_Bus2", type=BusType.STEREO, slots={BusSlot.LEFT: 3, BusSlot.RIGHT: 4})],
         )
         
         # Mock Console
