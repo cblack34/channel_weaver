@@ -13,6 +13,8 @@ class SectionInfo(BaseModel):
     section_number: int = Field(..., ge=1, description="Sequential section number (1-based)")
     start_sample: int = Field(..., ge=0, description="Start position in samples")
     end_sample: int = Field(..., ge=0, description="End position in samples")
+    start_seconds: float = Field(default=0.0, ge=0, description="Start time in seconds")
+    duration_seconds: float = Field(default=0.0, ge=0, description="Duration in seconds")
     section_type: SectionType = Field(..., description="Type of section (song or speaking)")
     bpm: int | None = Field(None, ge=1, description="Estimated BPM for the section")
 
