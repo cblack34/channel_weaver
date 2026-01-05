@@ -11,7 +11,7 @@ from src.constants import VERSION
 from src.exceptions import ConfigError, AudioProcessingError, YAMLConfigError
 from src.audio.extractor import AudioExtractor
 from src.processing.builder import TrackBuilder
-from src.config import ConfigLoader, CHANNELS, BUSES, BitDepth
+from src.config import ConfigLoader, CHANNELS, BUSES, BitDepth, ProcessingOptions
 from src.config.resolver import ConfigResolver
 from src.cli.utils import _sanitize_path, _ensure_output_path, _determine_temp_dir
 
@@ -110,6 +110,31 @@ def process(
             help="Enable verbose debug output",
         ),
     ] = False,
+    section_by_click: Annotated[
+        bool,
+        typer.Option(
+            "--section-by-click",
+            help="Enable section splitting based on click track analysis",
+        ),
+    ] = False,
+    gap_threshold: Annotated[
+        Optional[float],
+        typer.Option(
+            "--gap-threshold",
+            min=0.1,
+            help="Minimum gap between sections in seconds (overrides config)",
+        ),
+    ] = None,
+    session_json: Annotated[
+        Optional[Path],
+        typer.Option(
+            "--session-json",
+            file_okay=True,
+            dir_okay=False,
+            resolve_path=True,
+            help="Output session metadata as JSON file",
+        ),
+    ] = None,
 ) -> None:
     """Process multitrack recordings according to configuration."""
 
@@ -160,6 +185,16 @@ def process(
             )
         
         channels, buses, section_splitting = config_loader.load()
+
+        # Create and merge processing options
+        processing_options = ProcessingOptions(
+            section_by_click=section_by_click,
+            gap_threshold_seconds=gap_threshold,
+            session_json_path=session_json,
+        )
+        channels, buses, section_splitting = config_loader.merge_processing_options(
+            channels, buses, section_splitting, processing_options
+        )
 
         # Extract segments
         segments = extractor.extract_segments(target_bit_depth=bit_depth)

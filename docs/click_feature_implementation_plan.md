@@ -10,12 +10,16 @@ For full feature requirements, refer to the [Click Feature PRD](./Click%20Featur
 
 The following technical decisions guide the implementation:
 
-### Audio Analysis Library: aubio
-- **Decision**: Use [aubio](https://aubio.org/) for onset detection and BPM estimation.
-- **Rationale**: aubio is optimized for real-time audio analysis, written in C with Python bindings, and supports streaming/chunked processing natively. This makes it more suitable than librosa for memory-efficient processing of long recordings.
-- **Key Classes**: `aubio.onset`, `aubio.tempo`, `aubio.source` for streaming audio input.
-- **Installation**: Available via `pip install aubio` or `conda install -c conda-forge aubio`.
-- **Architecture Note**: Implement behind a protocol/abstract interface (e.g., `ClickAnalyzerProtocol`) to allow future replacement with alternative libraries if needed, following the Dependency Inversion Principle.
+### Audio Analysis Library: Custom Implementation with NumPy/SciPy/soundfile
+- **Decision**: Build a custom onset detection and BPM estimation solution using NumPy, SciPy, and soundfile.
+- **Rationale**: This approach uses well-maintained, widely-compatible scientific Python libraries that have robust Python 3.14+ support. NumPy provides efficient array operations, SciPy provides signal processing algorithms (`scipy.signal.find_peaks`, filtering, spectral analysis), and soundfile provides memory-efficient streaming audio I/O via libsndfile.
+- **Key Components**:
+  - `soundfile.blocks()`: Stream audio in configurable block sizes without loading entire files into memory.
+  - `scipy.signal.find_peaks()`: Peak detection with configurable prominence, distance, and height thresholds.
+  - `numpy.fft.rfft()` / `scipy.fft.rfft()`: Spectral analysis for onset detection functions.
+  - `scipy.signal.butter()` / `scipy.signal.sosfilt()`: Bandpass filtering to isolate click frequencies.
+- **Installation**: All libraries are available via `uv add numpy scipy soundfile`.
+- **Architecture Note**: Implement behind a protocol/abstract interface (`ClickAnalyzerProtocol`) to allow future replacement with alternative implementations if needed, following the Dependency Inversion Principle.
 
 ### WAV Metadata Embedding: Industry Standard RIFF Chunks
 - **Decision**: Use industry-standard RIFF INFO chunks for WAV metadata rather than non-standard ID3 tags in WAV files.
@@ -26,8 +30,8 @@ The following technical decisions guide the implementation:
 
 ### Memory Efficiency: Streaming/Chunked Processing
 - **Decision**: Implement streaming/chunked analysis for click track processing to support multi-hour recordings.
-- **Implementation**: Use `aubio.source` with configurable `hop_size` to read audio in chunks without loading the full file into memory.
-- **Rationale**: Ensures the feature scales to long recording sessions without memory constraints.
+- **Implementation**: Use `soundfile.blocks()` with configurable `blocksize` and optional `overlap` to read audio in chunks without loading the full file into memory. Process each block through the onset detection pipeline and accumulate results.
+- **Rationale**: Ensures the feature scales to long recording sessions without memory constraints. The `soundfile` library wraps libsndfile, which is highly optimized for streaming audio I/O.
 
 ---
 
@@ -152,41 +156,70 @@ Extend the Typer-based CLI in `src/cli/commands.py` to add the new `--section-by
 
 ---
 
-## Story 4: Implement aubio-Based Click Track Analyzer
+## Story 4: Implement Custom Click Track Analyzer with NumPy/SciPy
 
 **Description:**  
-Create a concrete implementation of the `ClickAnalyzerProtocol` using the aubio library for streaming audio analysis. This module handles onset detection, BPM estimation, and section boundary identification.
+Create a concrete implementation of the `ClickAnalyzerProtocol` using NumPy, SciPy, and soundfile for streaming audio analysis. This module handles onset detection, BPM estimation, and section boundary identification using signal processing techniques.
 
 **Detailed Requirements:**  
-- Create `src/audio/click/aubio_analyzer.py` with an `AubioClickAnalyzer` class implementing `ClickAnalyzerProtocol`.
-- Use `aubio.source` for streaming audio input with configurable `hop_size` (default: 512) to process in chunks.
-- Use `aubio.onset` with method `'default'` or `'hfc'` (tuned for percussive sounds like metronome clicks).
-- Use `aubio.tempo` for beat tracking and BPM estimation within sliding windows.
-- Implement the following analysis pipeline:
-  1. Stream audio in chunks using `aubio.source`.
-  2. Detect onsets and record positions in **samples** (not seconds) for maximum precision.
-  3. Compute inter-onset intervals (IOI) in samples, then convert to BPM using sample rate.
-  4. Identify gaps exceeding `gap_threshold_seconds` (converted to samples) as section boundaries.
-  5. Identify BPM changes exceeding `bpm_change_threshold` as section boundaries.
-  6. Build section boundary list with start/end samples and computed BPM values.
-- Implement robust BPM estimation using median IOI within sliding windows to handle tempo variations.
-- Handle edge cases: no onsets detected, single onset, very short audio files.
-- Add logging for debugging detection issues.
-- Ensure the implementation conforms to `ClickAnalyzerProtocol` interface exactly.
+- Create `src/audio/click/scipy_analyzer.py` with a `ScipyClickAnalyzer` class implementing `ClickAnalyzerProtocol`.
+
+**Audio I/O Component:**
+- Use `soundfile.blocks()` for streaming audio input with configurable `blocksize` (default: 32768 samples, approximately 0.74 seconds at 44.1kHz) and optional `overlap` for continuous processing.
+- Extract click track channel from multi-channel files using array slicing on the returned NumPy arrays.
+- Track absolute sample position across blocks to maintain sample-accurate onset positions.
+
+**Onset Detection Component:**
+Implement an energy-based onset detection function using the following signal processing pipeline:
+1. **Bandpass Filtering**: Design a Butterworth bandpass filter using `scipy.signal.butter()` with `output='sos'` for numerical stability. Configure cutoff frequencies appropriate for metronome clicks (typically 1kHz-8kHz). Apply filter using `scipy.signal.sosfilt()`.
+2. **Envelope Extraction**: Compute the amplitude envelope by taking the absolute value of the filtered signal, then apply a smoothing filter (low-pass or moving average using `scipy.ndimage.uniform_filter1d()` or `numpy.convolve()`).
+3. **Novelty Function**: Compute the first derivative (difference) of the envelope using `numpy.diff()`. Half-wave rectify (set negative values to zero) to capture only energy increases.
+4. **Peak Detection**: Apply `scipy.signal.find_peaks()` to the novelty function with the following configurable parameters:
+   - `height`: Minimum peak height threshold (adaptive based on signal statistics, e.g., `mean + 2*std`).
+   - `distance`: Minimum samples between peaks (prevents double-detection; set based on expected minimum BPM, e.g., 300 BPM = 200ms = ~8820 samples at 44.1kHz).
+   - `prominence`: Minimum peak prominence to distinguish true onsets from noise.
+5. **Sample Position Calculation**: Convert peak indices to absolute sample positions relative to the start of the audio file, accounting for block offsets and any filter group delay.
+
+**BPM Estimation Component:**
+- Calculate inter-onset intervals (IOI) in samples between consecutive detected onsets.
+- Convert IOI to BPM using the formula: `BPM = (sample_rate * 60) / IOI_samples`.
+- Use median IOI within a sliding window (e.g., 8-16 consecutive intervals) for robust tempo estimation that handles occasional missed or spurious detections.
+- Return `None` for regions with insufficient onsets (fewer than 4 within the analysis window).
+
+**Section Boundary Detection:**
+1. Identify gaps exceeding `gap_threshold_seconds` (converted to samples) as section boundaries by analyzing IOI values.
+2. Identify significant BPM changes exceeding `bpm_change_threshold` between consecutive analysis windows as section boundaries.
+3. Build section boundary list with start/end samples and computed BPM values for each section.
+
+**Edge Case Handling:**
+- No onsets detected: Return single section spanning entire audio with `bpm=None`.
+- Single onset: Return single section spanning entire audio with `bpm=None`.
+- Very short audio (< 1 second): Process without streaming, handle as single block.
+- Silent or near-silent audio: Use adaptive thresholding that detects when no valid peaks exist.
+
+**Configuration Parameters (stored as class attributes or passed to constructor):**
+- `blocksize: int` - Audio block size in samples (default: 32768).
+- `bandpass_low: float` - Low cutoff frequency in Hz (default: 1000.0).
+- `bandpass_high: float` - High cutoff frequency in Hz (default: 8000.0).
+- `filter_order: int` - Butterworth filter order (default: 4).
+- `min_onset_distance_ms: float` - Minimum milliseconds between onsets (default: 150.0, corresponding to ~400 BPM max).
+- `peak_prominence_factor: float` - Factor multiplied by signal std for prominence threshold (default: 1.5).
 
 **Acceptance Criteria:**  
 - Implementation passes `isinstance(analyzer, ClickAnalyzerProtocol)` check.
-- Detection accurately identifies onsets in clean click tracks (>95% accuracy on test files).
-- BPM estimation is within ±2 BPM for steady tempos.
-- Memory usage remains constant regardless of audio file length (streaming verification).
-- Section boundaries align with expected song/speaking transitions in test files.
+- Detection accurately identifies onsets in clean click tracks (>95% accuracy on test files with known onset positions).
+- BPM estimation is within ±2 BPM for steady tempos on test files with known BPM values.
+- Memory usage remains constant regardless of audio file length (streaming verification via memory profiling).
+- Section boundaries align with expected song/speaking transitions in test files with annotated boundaries.
+- All onset positions are returned as integer sample counts, not floating-point seconds.
 
 **Definition of Done:**  
-- Unit tests with synthesized click track audio data.
+- Unit tests with synthesized click track audio data (sine wave bursts at known intervals and BPMs).
+- Unit tests for each sub-component: filtering, envelope extraction, peak detection, BPM calculation.
 - Integration tests with real WAV sample files (add to `tests/fixtures/`).
-- Performance test verifying constant memory for 1-hour+ simulated streams.
+- Performance test verifying constant memory for 1-hour+ simulated streams using `tracemalloc` or similar.
 - Code includes comprehensive docstrings and type hints.
-- All aubio-specific code is isolated behind the protocol interface.
+- All NumPy/SciPy-specific code is isolated behind the protocol interface, enabling future alternative implementations.
 
 ---
 
@@ -429,32 +462,35 @@ Implement robust error handling for detection failures, invalid configurations, 
 
 ---
 
-## Story 12: Add aubio Dependency and Update Project Configuration
+## Story 12: Add Signal Processing Dependencies and Update Project Configuration
 
 **Description:**  
-Add the aubio library as a project dependency and update pyproject.toml. Also add audiometa for metadata writing.
+Add the required signal processing libraries (NumPy, SciPy, soundfile) as project dependencies and update pyproject.toml. Also add audiometa for metadata writing.
 
 **Detailed Requirements:**  
-- Use `uv add aubio` to add the aubio library to dependencies. This ensures the latest compatible version is installed and pyproject.toml is formatted correctly.
+- Verify `numpy` is already a project dependency; if not, use `uv add numpy` to add it.
+- Use `uv add scipy` to add the SciPy library for signal processing algorithms (`find_peaks`, filtering, FFT).
+- Verify `soundfile` is already a project dependency (likely present for audio I/O); if not, use `uv add soundfile` to add it.
 - Use `uv add audiometa` to add the audiometa library for RIFF metadata writing.
 - Add dependencies using the `uv add <package>` command to ensure proper formatting and version resolution.
 - Run `uv sync` to verify the lock file is updated correctly.
-- Verify aubio installs correctly on Windows, macOS, and Linux via CI.
-- Document any system-level dependencies (aubio may require system libs on some platforms).
-- Add a note in README about optional system dependencies if any.
+- Verify all dependencies install correctly on Windows, macOS, and Linux via CI.
+- Note: SciPy and NumPy are pure Python wheels with binary extensions and should install without system dependencies on all major platforms.
 - Test that existing functionality is not affected by new dependencies.
 
 **Acceptance Criteria:**  
 - `uv sync` installs all dependencies without errors.
-- CI pipeline passes on all supported platforms.
+- CI pipeline passes on all supported platforms (Windows, macOS, Linux).
 - No version conflicts with existing dependencies.
 - pyproject.toml shows properly formatted dependency entries added by uv.
+- SciPy signal processing functions are importable: `from scipy.signal import find_peaks, butter, sosfilt`.
+- soundfile streaming functions are importable: `from soundfile import blocks`.
 
 **Definition of Done:**  
 - Dependencies added via `uv add` commands.
 - pyproject.toml and uv.lock updated correctly.
-- CI workflow tested and passing.
-- Installation documented in README if special steps needed.
+- CI workflow tested and passing on all platforms.
+- Quick verification script confirms imports work correctly.
 
 ---
 
@@ -498,7 +534,9 @@ Update README, add comprehensive tests, and ensure all quality checks pass for t
 
 | Dependency | Purpose | Installation Command |
 |------------|---------|---------------------|
-| aubio | Onset detection, BPM estimation, streaming audio analysis | `uv add aubio` |
+| numpy | Array operations, FFT, numerical computations for signal processing | `uv add numpy` (likely already present) |
+| scipy | Signal processing: `find_peaks`, `butter`, `sosfilt`, filtering, spectral analysis | `uv add scipy` |
+| soundfile | Streaming audio I/O via `blocks()`, WAV reading/writing with libsndfile | `uv add soundfile` (likely already present) |
 | audiometa | WAV metadata (RIFF INFO chunk) reading/writing | `uv add audiometa` |
 
 ## Appendix B: File Structure for New Code
@@ -511,7 +549,7 @@ src/
 │       ├── protocols.py          # ClickAnalyzerProtocol
 │       ├── enums.py              # SectionType enum
 │       ├── models.py             # SectionInfo, SectionBoundaries (Pydantic models)
-│       ├── aubio_analyzer.py     # aubio implementation of ClickAnalyzerProtocol
+│       ├── scipy_analyzer.py     # NumPy/SciPy implementation of ClickAnalyzerProtocol
 │       └── section_processor.py  # Merging and processing logic
 ├── config/
 │   ├── models.py                 # Add SectionSplittingConfig

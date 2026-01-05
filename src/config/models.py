@@ -1,10 +1,19 @@
 """Pydantic models for Channel Weaver configuration."""
 
+from pathlib import Path
 from typing import Self
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from src.config.enums import ChannelAction, BusSlot, BusType
+
+
+class ProcessingOptions(BaseModel):
+    """CLI options that can override configuration values."""
+
+    section_by_click: bool = Field(default=False, description="Enable section splitting by click track")
+    gap_threshold_seconds: float | None = Field(default=None, gt=0, description="Override gap threshold for section splitting")
+    session_json_path: Path | None = Field(default=None, description="Path to output session JSON metadata")
 
 
 class SectionSplittingConfig(BaseModel):
@@ -14,6 +23,19 @@ class SectionSplittingConfig(BaseModel):
     gap_threshold_seconds: float = Field(default=3.0, gt=0, description="Minimum gap between sections in seconds")
     min_section_length_seconds: float = Field(default=15.0, gt=0, description="Minimum length for a section in seconds")
     bpm_change_threshold: int = Field(default=1, ge=1, description="Minimum BPM change to trigger new section")
+
+    # Algorithm parameters - not configurable via CLI
+    bandpass_low: int = Field(default=500, ge=1, description="Low cutoff for click frequency range (Hz)")
+    bandpass_high: int = Field(default=5000, ge=1, description="High cutoff for click frequency range (Hz)")
+
+    filter_order: int = Field(default=4, ge=1, description="Butterworth filter order")
+    min_peak_distance: float = Field(default=0.1, gt=0, description="Minimum distance between peaks (seconds)")
+    peak_prominence: float = Field(default=0.1, gt=0, description="Minimum peak prominence")
+    novelty_window: float = Field(default=0.05, gt=0, description="Window size for novelty function (seconds)")
+    
+    bpm_window_seconds: float = Field(default=5.0, gt=0, description="Window for BPM estimation (seconds)")
+    min_bpm: int = Field(default=45, ge=1, description="Minimum expected BPM")
+    max_bpm: int = Field(default=300, ge=1, description="Maximum expected BPM")
 
 
 class ChannelConfig(BaseModel):

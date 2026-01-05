@@ -63,6 +63,9 @@ class TestMainCommand:
         # Both constructor and from_yaml() classmethod need to return instances with load() method
         mocks["config_loader"].return_value.load.return_value = ([], [], None)
         mocks["config_loader"].from_yaml.return_value.load.return_value = ([], [], None)
+        # Mock merge_processing_options to return the same values
+        mocks["config_loader"].return_value.merge_processing_options.return_value = ([], [], None)
+        mocks["config_loader"].from_yaml.return_value.merge_processing_options.return_value = ([], [], None)
 
         # Mock console
         mocks["console"] = mocker.patch("src.cli.commands.Console")
@@ -114,6 +117,9 @@ class TestMainCommand:
             keep_temp=False,
             version=False,
             verbose=False,
+            section_by_click=False,
+            gap_threshold=None,
+            session_json=None,
         )
 
         # Verify path utilities were called
@@ -188,6 +194,9 @@ class TestMainCommand:
                     keep_temp=False,
                     version=False,
                     verbose=True,
+                    section_by_click=False,
+                    gap_threshold=None,
+                    session_json=None,
                 )
 
         # Verify debug logging was enabled
@@ -229,6 +238,9 @@ class TestMainCommand:
                 keep_temp=False,
                 version=False,
                 verbose=False,
+                section_by_click=False,
+                gap_threshold=None,
+                session_json=None,
             )
 
         # Verify error was printed
@@ -276,6 +288,9 @@ class TestMainCommand:
                 keep_temp=False,
                 version=False,
                 verbose=False,
+                section_by_click=False,
+                gap_threshold=None,
+                session_json=None,
             )
 
         # Verify error was printed
@@ -322,6 +337,9 @@ class TestMainCommand:
                 keep_temp=False,  # This should trigger cleanup
                 version=False,
                 verbose=False,
+                section_by_click=False,
+                gap_threshold=None,
+                session_json=None,
             )
 
         # Verify cleanup was called despite the error
@@ -356,6 +374,9 @@ class TestMainCommand:
             keep_temp=True,  # This should skip cleanup
             version=False,
             verbose=False,
+            section_by_click=False,
+            gap_threshold=None,
+            session_json=None,
         )
 
         # Verify cleanup was NOT called

@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Any, Iterable
 
-from src.config.models import ChannelConfig, BusConfig, SectionSplittingConfig
+from src.config.models import ChannelConfig, BusConfig, SectionSplittingConfig, ProcessingOptions
 from src.config.validators import ChannelValidator, BusValidator
 from src.config.protocols import ConfigSource
 from src.exceptions import ConfigValidationError
@@ -290,3 +290,50 @@ class ConfigLoader:
 
         # Return sorted by channel number
         return sorted(existing.values(), key=lambda ch: ch.ch)
+
+    def merge_processing_options(
+        self,
+        channels: list[ChannelConfig],
+        buses: list[BusConfig],
+        section_splitting: SectionSplittingConfig,
+        options: ProcessingOptions,
+    ) -> tuple[list[ChannelConfig], list[BusConfig], SectionSplittingConfig]:
+        """Merge CLI processing options with loaded configuration.
+
+        CLI options take precedence over configuration file values.
+
+        Args:
+            channels: Loaded channel configurations
+            buses: Loaded bus configurations
+            section_splitting: Loaded section splitting configuration
+            options: CLI processing options
+
+        Returns:
+            Tuple of (channels, buses, section_splitting) with CLI options applied
+        """
+        # Handle section_by_click option
+        if options.section_by_click:
+            # Check if there's already a CLICK channel
+            click_channel_exists = any(channel.action == ChannelAction.CLICK for channel in channels)
+            if not click_channel_exists:
+                # Look for a channel named "Click" (case-insensitive) with PROCESS action
+                click_channel_found = False
+                for channel in channels:
+                    if channel.name.lower() == "click" and channel.action == ChannelAction.PROCESS:
+                        channel.action = ChannelAction.CLICK
+                        click_channel_found = True
+                        break
+                if not click_channel_found:
+                    raise ConfigValidationError(
+                        "--section-by-click specified but no channel named 'Click' found to use as click track"
+                    )
+            section_splitting.enabled = True
+
+        # Override gap threshold if provided
+        if options.gap_threshold_seconds is not None:
+            section_splitting.gap_threshold_seconds = options.gap_threshold_seconds
+
+        # Validate click channel constraints after applying CLI options
+        self._validate_click_channel_constraints(channels, section_splitting)
+
+        return channels, buses, section_splitting
