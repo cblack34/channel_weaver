@@ -61,8 +61,8 @@ class TestMainCommand:
 
         # Configure default return values for ConfigLoader paths
         # Both constructor and from_yaml() classmethod need to return instances with load() method
-        mocks["config_loader"].return_value.load.return_value = ([], [])
-        mocks["config_loader"].from_yaml.return_value.load.return_value = ([], [])
+        mocks["config_loader"].return_value.load.return_value = ([], [], None)
+        mocks["config_loader"].from_yaml.return_value.load.return_value = ([], [], None)
 
         # Mock console
         mocks["console"] = mocker.patch("src.cli.commands.Console")
@@ -99,7 +99,7 @@ class TestMainCommand:
 
         # Configure config loader
         mock_config_instance = mocks["config_loader"].return_value
-        mock_config_instance.load.return_value = ([], [])  # empty channels and buses
+        mock_config_instance.load.return_value = ([], [], None)  # empty channels, buses, and section_splitting
 
         # Configure builder
         mock_builder_instance = mocks["builder"].return_value
@@ -345,7 +345,7 @@ class TestMainCommand:
         mock_extractor_instance.channels = 2
         mock_extractor_instance.cleanup.return_value = None
 
-        mocks["config_loader"].return_value.load.return_value = ([], [])
+        mocks["config_loader"].return_value.load.return_value = ([], [], None)
 
         # Execute with keep_temp=True
         process(
@@ -564,6 +564,7 @@ class TestValidateConfigCommand:
         mock_source.load.return_value = (
             [{"ch": 1, "name": "Channel_1", "action": "BUS"}],
             [{"file_name": "01_Master", "type": "STEREO", "slots": {"LEFT": 1, "RIGHT": 1}}],
+            None,  # section_splitting_data
             1,  # schema_version
         )
         
@@ -571,11 +572,12 @@ class TestValidateConfigCommand:
         mock_loader_class = mocker.patch("src.cli.commands.ConfigLoader")
         mock_loader = mock_loader_class.return_value
         # Return actual model instances
-        from src.config.models import ChannelConfig, BusConfig
+        from src.config.models import ChannelConfig, BusConfig, SectionSplittingConfig
         from src.config.enums import BusSlot, ChannelAction, BusType
         mock_loader.load.return_value = (
             [ChannelConfig(ch=1, name="Channel_1", action=ChannelAction.BUS, output_ch=None)],
             [BusConfig(file_name="01_Master", type=BusType.STEREO, slots={BusSlot.LEFT: 1, BusSlot.RIGHT: 1})],
+            SectionSplittingConfig(),  # default section_splitting
         )
         
         # Mock Console
@@ -615,6 +617,7 @@ class TestValidateConfigCommand:
         mock_source.load.return_value = (
             channels_data,
             [{"file_name": "01_Master", "type": "STEREO", "slots": {"LEFT": 1, "RIGHT": 2}}],
+            None,  # section_splitting_data
             1,
         )
         
@@ -622,13 +625,14 @@ class TestValidateConfigCommand:
         mock_loader_class = mocker.patch("src.cli.commands.ConfigLoader")
         mock_loader = mock_loader_class.return_value
         # Return actual model instances
-        from src.config.models import ChannelConfig, BusConfig
+        from src.config.models import ChannelConfig, BusConfig, SectionSplittingConfig
         from src.config.enums import BusSlot, ChannelAction, BusType
         bus_channels = [ChannelConfig(ch=1, name="Ch_1", action=ChannelAction.BUS, output_ch=None), ChannelConfig(ch=2, name="Ch_2", action=ChannelAction.BUS, output_ch=None)]
         process_channels = [ChannelConfig(ch=i, name=f"Ch_{i}", output_ch=None) for i in range(3, 9)]
         mock_loader.load.return_value = (
             bus_channels + process_channels,
             [BusConfig(file_name="01_Master", type=BusType.STEREO, slots={BusSlot.LEFT: 1, BusSlot.RIGHT: 2})],
+            SectionSplittingConfig(),  # default section_splitting
         )
         
         # Mock Console
@@ -693,6 +697,7 @@ class TestValidateConfigCommand:
         mock_source.load.return_value = (
             [{"ch": 1, "name": "Channel_1", "action": "PROCESS"}],
             [{"file_name": "01_Master", "type": "STEREO", "slots": {"LEFT": 99, "RIGHT": 99}}],  # Invalid channel reference
+            None,  # section_splitting_data
             1,
         )
         
@@ -740,6 +745,7 @@ class TestValidateConfigCommand:
         mock_source.load.return_value = (
             channels_data,
             [{"file_name": "01_Bus1", "type": "STEREO", "slots": {"LEFT": 1, "RIGHT": 2}}, {"file_name": "02_Bus2", "type": "STEREO", "slots": {"LEFT": 3, "RIGHT": 4}}],
+            None,  # section_splitting_data
             2,  # schema_version
         )
         
@@ -747,13 +753,14 @@ class TestValidateConfigCommand:
         mock_loader_class = mocker.patch("src.cli.commands.ConfigLoader")
         mock_loader = mock_loader_class.return_value
         # Return actual model instances
-        from src.config.models import ChannelConfig, BusConfig
+        from src.config.models import ChannelConfig, BusConfig, SectionSplittingConfig
         from src.config.enums import BusSlot, ChannelAction, BusType
         bus_channels = [ChannelConfig(ch=i, name=f"Ch_{i}", action=ChannelAction.BUS, output_ch=None) for i in range(1, 5)]
         process_channels = [ChannelConfig(ch=i, name=f"Ch_{i}", output_ch=None) for i in range(5, 17)]
         mock_loader.load.return_value = (
             bus_channels + process_channels,
             [BusConfig(file_name="01_Bus1", type=BusType.STEREO, slots={BusSlot.LEFT: 1, BusSlot.RIGHT: 2}), BusConfig(file_name="02_Bus2", type=BusType.STEREO, slots={BusSlot.LEFT: 3, BusSlot.RIGHT: 4})],
+            SectionSplittingConfig(),  # default section_splitting
         )
         
         # Mock Console

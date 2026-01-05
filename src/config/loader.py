@@ -1,13 +1,14 @@
 """Configuration loader for Channel Weaver."""
 
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
 
-from src.config.models import ChannelConfig, BusConfig, ChannelAction
+from src.config.models import ChannelConfig, BusConfig, SectionSplittingConfig
 from src.config.validators import ChannelValidator, BusValidator
 from src.config.protocols import ConfigSource
 from src.exceptions import ConfigValidationError
 from src.config.types import ChannelData, BusData
+from src.config.enums import ChannelAction
 
 
 class ConfigLoader:
@@ -20,6 +21,7 @@ class ConfigLoader:
     Attributes:
         _channels_data: Raw channel configuration dictionaries
         _buses_data: Raw bus configuration dictionaries
+        _section_splitting_data: Raw section splitting configuration dictionary
         _detected_channels: Number of channels detected in input audio (optional)
         _channel_validator: Validator for channel configurations
         _bus_validator: Validator for bus configurations
@@ -30,6 +32,7 @@ class ConfigLoader:
             channels_data: Iterable[ChannelData],
             buses_data: Iterable[BusData],
             *,
+            section_splitting_data: dict[str, Any] | None = None,
             detected_channel_count: int | None = None,
             channel_validator: ChannelValidator | None = None,
             bus_validator: BusValidator | None = None,
@@ -39,12 +42,14 @@ class ConfigLoader:
         Args:
             channels_data: Iterable of raw channel configuration dictionaries
             buses_data: Iterable of raw bus configuration dictionaries
+            section_splitting_data: Raw section splitting configuration dictionary
             detected_channel_count: Number of channels detected in input audio files
             channel_validator: Custom channel validator (uses default if None)
             bus_validator: Custom bus validator (uses default if None)
         """
         self._channels_data = list(channels_data)
         self._buses_data = list(buses_data)
+        self._section_splitting_data = section_splitting_data
         self._detected_channels = detected_channel_count
         # Use injected validators or create defaults
         self._channel_validator = channel_validator or (
@@ -77,11 +82,12 @@ class ConfigLoader:
         Returns:
             ConfigLoader instance initialized from the source
         """
-        channels_data, buses_data, schema_version = source.load()
+        channels_data, buses_data, section_splitting_data, schema_version = source.load()
 
         return cls(
             channels_data=channels_data,  # type: ignore[arg-type]
             buses_data=buses_data,  # type: ignore[arg-type]
+            section_splitting_data=section_splitting_data,
             detected_channel_count=detected_channel_count,
             channel_validator=channel_validator,
             bus_validator=bus_validator,
@@ -119,14 +125,14 @@ class ConfigLoader:
             bus_validator=bus_validator,
         )
 
-    def load(self) -> tuple[list[ChannelConfig], list[BusConfig]]:
-        """Return validated channel and bus configurations.
+    def load(self) -> tuple[list[ChannelConfig], list[BusConfig], SectionSplittingConfig]:
+        """Return validated channel, bus, and section splitting configurations.
 
         Processes raw configuration data through validation and normalization,
         ensuring all channels are accounted for and bus assignments are valid.
 
         Returns:
-            Tuple of (channels, buses) where channels includes auto-created entries
+            Tuple of (channels, buses, section_splitting) where channels includes auto-created entries
             for any missing channels detected in the audio.
 
         Raises:
@@ -135,6 +141,7 @@ class ConfigLoader:
 
         channels = self._load_channels()
         buses = self._load_buses()
+        section_splitting = self._load_section_splitting()
 
         if self._channel_validator:
             self._channel_validator.validate(channels)
@@ -143,8 +150,11 @@ class ConfigLoader:
             self._bus_validator.validate_channels(bus_channels)
             self._bus_validator.validate_no_conflicts(channels, bus_channels)
 
+        # Validate click channel constraints
+        self._validate_click_channel_constraints(channels, section_splitting)
+
         completed_channels = self._complete_channel_list(channels, bus_channels)
-        return completed_channels, buses
+        return completed_channels, buses, section_splitting
 
     def _load_channels(self) -> list[ChannelConfig]:
         """Load channel configurations from raw data.
@@ -181,6 +191,49 @@ class ConfigLoader:
             except Exception as e:
                 raise ConfigValidationError(f"Invalid bus configuration: {data}") from e
         return buses
+
+    def _load_section_splitting(self) -> SectionSplittingConfig:
+        """Load section splitting configuration from raw data.
+
+        Returns:
+            SectionSplittingConfig object, using defaults if no data provided.
+
+        Raises:
+            ConfigValidationError: If section splitting data cannot be parsed
+        """
+        if self._section_splitting_data is None:
+            return SectionSplittingConfig()
+        try:
+            return SectionSplittingConfig(**self._section_splitting_data)
+        except Exception as e:
+            raise ConfigValidationError(f"Invalid section splitting configuration: {self._section_splitting_data}") from e
+
+    def _validate_click_channel_constraints(self, channels: list[ChannelConfig], section_splitting: SectionSplittingConfig) -> None:
+        """Validate constraints related to click channels and section splitting.
+
+        Args:
+            channels: List of channel configurations
+            section_splitting: Section splitting configuration
+
+        Raises:
+            ConfigValidationError: If constraints are violated
+        """
+        click_channels = [ch for ch in channels if ch.action == ChannelAction.CLICK]
+
+        if section_splitting.enabled:
+            if len(click_channels) == 0:
+                raise ConfigValidationError(
+                    "Section splitting is enabled but no channel has action 'click'"
+                )
+            if len(click_channels) > 1:
+                raise ConfigValidationError(
+                    f"Section splitting is enabled but multiple channels have action 'click': {[ch.ch for ch in click_channels]}"
+                )
+        else:
+            if len(click_channels) > 0:
+                raise ConfigValidationError(
+                    f"Channels have action 'click' but section splitting is not enabled: {[ch.ch for ch in click_channels]}"
+                )
 
     def _collect_bus_channels(self, buses: list[BusConfig]) -> list[int]:
         """Extract all channel numbers used in bus configurations.

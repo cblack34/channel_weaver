@@ -85,7 +85,7 @@ class TestBasicPipeline:
             raw_buses,
             detected_channel_count=extractor.channels
         )
-        channels, buses = config_loader.load()
+        channels, buses, section_splitting = config_loader.load()
 
         # Step 3: Build tracks
         builder = TrackBuilder(

@@ -38,7 +38,7 @@ buses:
             source,
             detected_channel_count=4,
         )
-        channels, buses = loader.load()
+        channels, buses, section_splitting = loader.load()
 
         assert len(channels) == 4
         assert len(buses) == 1

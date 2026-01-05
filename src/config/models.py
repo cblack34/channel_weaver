@@ -7,6 +7,15 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from src.config.enums import ChannelAction, BusSlot, BusType
 
 
+class SectionSplittingConfig(BaseModel):
+    """Configuration for click-based section splitting."""
+
+    enabled: bool = Field(default=False, description="Enable click-based section splitting")
+    gap_threshold_seconds: float = Field(default=3.0, gt=0, description="Minimum gap between sections in seconds")
+    min_section_length_seconds: float = Field(default=15.0, gt=0, description="Minimum length for a section in seconds")
+    bpm_change_threshold: int = Field(default=1, ge=1, description="Minimum BPM change to trigger new section")
+
+
 class ChannelConfig(BaseModel):
     """User-editable channel configuration entry."""
 
@@ -72,7 +81,7 @@ class BusConfig(BaseModel):
         return value
 
     @model_validator(mode='after')
-    def validate_slots(self) -> Self:  # noqa: B902
+    def validate_slots(self) -> Self:
         # Validate slot channel numbers are positive
         for slot, ch in self.slots.items():
             if ch < 1:

@@ -22,7 +22,8 @@ class TestConfigSourceProtocol:
         assert hasattr(source, 'load')
         assert hasattr(source, 'source_description')
 
-        channels, buses, version = source.load()
+        channels, buses, section_splitting, version = source.load()
         assert isinstance(channels, list)
         assert isinstance(buses, list)
+        assert section_splitting is None
         assert version == CURRENT_SCHEMA_VERSION

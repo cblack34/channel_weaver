@@ -25,7 +25,7 @@ class TestChannelAction:
 
     def test_channel_action_members(self) -> None:
         """Test that all expected members exist."""
-        expected_members = {"PROCESS", "BUS", "SKIP"}
+        expected_members = {"PROCESS", "BUS", "SKIP", "CLICK"}
         actual_members = {member.name for member in ChannelAction}
         assert actual_members == expected_members
 

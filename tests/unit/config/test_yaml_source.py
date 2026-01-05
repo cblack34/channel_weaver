@@ -27,7 +27,7 @@ buses:
       RIGHT: 2
 """)
         source = YAMLConfigSource(config_file)
-        channels, buses, version = source.load()
+        channels, buses, section_splitting, version = source.load()
 
         assert len(channels) == 2
         assert channels[0]["ch"] == 1
@@ -65,7 +65,7 @@ buses:
         config_file.write_text("schema_version: 1\nchannels:\n  - ch: 1\n    name: Kick")
 
         source = YAMLConfigSource(config_file)
-        channels, buses, version = source.load()
+        channels, buses, section_splitting, version = source.load()
 
         assert len(channels) == 1
         assert buses == []

@@ -38,7 +38,7 @@ class YAMLConfigSource:
         """Human-readable description of the config source."""
         return f"YAML file: {self._config_path}"
 
-    def load(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
+    def load(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any] | None, int]:
         """Load and parse the YAML configuration file.
 
         Returns:
@@ -69,14 +69,14 @@ class YAMLConfigSource:
 
     def _extract_config(
         self, data: dict[str, Any]
-    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
-        """Extract channels, buses, and schema version from parsed YAML.
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any] | None, int]:
+        """Extract channels, buses, section_splitting, and schema version from parsed YAML.
 
         Args:
             data: Parsed YAML data as a dictionary
 
         Returns:
-            Tuple of (channels_data, buses_data, schema_version)
+            Tuple of (channels_data, buses_data, section_splitting_data, schema_version)
 
         Raises:
             YAMLConfigError: If required sections are missing or invalid
@@ -110,4 +110,11 @@ class YAMLConfigSource:
                 f"'buses' must be a list, got {type(buses).__name__}"
             )
 
-        return channels, buses, schema_version
+        # Extract section_splitting (optional, default to None)
+        section_splitting = data.get('section_splitting')
+        if section_splitting is not None and not isinstance(section_splitting, dict):
+            raise YAMLConfigError(
+                f"'section_splitting' must be a mapping, got {type(section_splitting).__name__}"
+            )
+
+        return channels, buses, section_splitting, schema_version

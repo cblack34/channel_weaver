@@ -159,7 +159,7 @@ def process(
                 detected_channel_count=detected_channel_count,
             )
         
-        channels, buses = config_loader.load()
+        channels, buses, section_splitting = config_loader.load()
 
         # Extract segments
         segments = extractor.extract_segments(target_bit_depth=bit_depth)
@@ -281,11 +281,15 @@ def validate_config(
     try:
         # Load and parse YAML
         source = YAMLConfigSource(config_path)
-        channels_data, buses_data, schema_version = source.load()
+        channels_data, buses_data, section_splitting_data, schema_version = source.load()
         
         console.print(f"[dim]Schema version: {schema_version}[/dim]")
         console.print(f"[dim]Channels defined: {len(channels_data)}[/dim]")
         console.print(f"[dim]Buses defined: {len(buses_data)}[/dim]")
+        if section_splitting_data:
+            console.print("[dim]Section splitting: enabled[/dim]")
+        else:
+            console.print("[dim]Section splitting: disabled[/dim]")
         
         # Full validation through ConfigLoader
         config_loader = ConfigLoader(
@@ -293,11 +297,12 @@ def validate_config(
             buses_data,  # type: ignore[arg-type]
             detected_channel_count=channel_count,
         )
-        channels, buses = config_loader.load()
+        channels, buses, section_splitting = config_loader.load()
         
         console.print("\n[green]✓ Configuration is valid[/green]")
         console.print(f"  Channels: {len(channels)}")
         console.print(f"  Buses: {len(buses)}")
+        console.print(f"  Section splitting: {'enabled' if section_splitting.enabled else 'disabled'}")
         
         if channel_count:
             console.print(f"  Validated against {channel_count} channels")
