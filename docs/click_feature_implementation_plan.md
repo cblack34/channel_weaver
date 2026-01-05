@@ -302,13 +302,13 @@ Modify the main processing pipeline in `src/processing/` to optionally split aud
 - Memory-efficient implementation using streaming or temporary files.
 - Code review confirms no breaking changes to existing functionality.
 
-**Status:** Ready to start
+**Status:** Done
 
 ---
 
 ## Story 7: Update Output Directory Structure for Sections
 
-**Status:** Waiting on dependencies
+**Status:** Ready to start
 
 **Description:**  
 Modify the output logic in `src/output/` to create numbered section directories instead of placing tracks directly in the output directory when section splitting is enabled.
@@ -338,7 +338,7 @@ Modify the output logic in `src/output/` to create numbered section directories 
 
 ## Story 8: Embed BPM Metadata in WAV Files
 
-**Status:** Waiting on dependencies
+**Status:** Ready to start
 
 **Description:**  
 Add functionality to embed detected BPM values into the WAV files of each section using industry-standard metadata. Focus on RIFF INFO chunks for DAW compatibility.
@@ -382,7 +382,7 @@ Follow the interface-first pattern: define a `MetadataWriterProtocol` before imp
 
 ## Story 9: Implement Console Summary Output
 
-**Status:** Waiting on dependencies
+**Status:** Ready to start
 
 **Description:**  
 Add console output functionality to display a Rich-formatted table summarizing detected sections with start times, durations, types, and BPMs.
@@ -412,7 +412,7 @@ Add console output functionality to display a Rich-formatted table summarizing d
 
 ## Story 10: Implement Optional JSON Session Output
 
-**Status:** Waiting on dependencies
+**Status:** Ready to start
 
 **Description:**  
 Add functionality to write a JSON file containing detailed session metadata when the `--session-json` flag is provided.
@@ -456,7 +456,7 @@ Add functionality to write a JSON file containing detailed session metadata when
 
 ## Story 11: Add Comprehensive Error Handling and Fallbacks
 
-**Status:** Waiting on dependencies
+**Status:** Ready to start
 
 **Description:**  
 Implement robust error handling for detection failures, invalid configurations, and edge cases, with appropriate fallbacks to maintain app stability.

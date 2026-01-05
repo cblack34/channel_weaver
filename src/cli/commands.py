@@ -11,6 +11,7 @@ from src.constants import VERSION
 from src.exceptions import ConfigError, AudioProcessingError, YAMLConfigError
 from src.audio.extractor import AudioExtractor
 from src.processing.builder import TrackBuilder
+from src.processing.section_splitter import SectionSplitter
 from src.config import ConfigLoader, CHANNELS, BUSES, BitDepth, ProcessingOptions
 from src.config.resolver import ConfigResolver
 from src.cli.utils import _sanitize_path, _ensure_output_path, _determine_temp_dir
@@ -198,6 +199,15 @@ def process(
 
         # Extract segments
         segments = extractor.extract_segments(target_bit_depth=bit_depth)
+
+        # Split segments into sections if enabled
+        section_splitter = SectionSplitter(
+            sample_rate=extractor.sample_rate,  # type: ignore[arg-type]
+            temp_dir=temp_root,
+            section_splitting=section_splitting,
+            console=console,
+        )
+        segments, section_info = section_splitter.split_segments_if_enabled(segments, channels)
 
         # Build tracks
         builder = TrackBuilder(

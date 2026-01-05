@@ -10,6 +10,7 @@ from pytest_mock import MockerFixture
 
 from src.cli.commands import version_callback, process, init_config, validate_config
 from src.config.enums import BitDepth
+from src.config.models import SectionSplittingConfig
 
 
 class TestVersionCallback:
@@ -61,11 +62,12 @@ class TestMainCommand:
 
         # Configure default return values for ConfigLoader paths
         # Both constructor and from_yaml() classmethod need to return instances with load() method
-        mocks["config_loader"].return_value.load.return_value = ([], [], None)
-        mocks["config_loader"].from_yaml.return_value.load.return_value = ([], [], None)
+        default_section_splitting = SectionSplittingConfig()
+        mocks["config_loader"].return_value.load.return_value = ([], [], default_section_splitting)
+        mocks["config_loader"].from_yaml.return_value.load.return_value = ([], [], default_section_splitting)
         # Mock merge_processing_options to return the same values
-        mocks["config_loader"].return_value.merge_processing_options.return_value = ([], [], None)
-        mocks["config_loader"].from_yaml.return_value.merge_processing_options.return_value = ([], [], None)
+        mocks["config_loader"].return_value.merge_processing_options.return_value = ([], [], default_section_splitting)
+        mocks["config_loader"].from_yaml.return_value.merge_processing_options.return_value = ([], [], default_section_splitting)
 
         # Mock console
         mocks["console"] = mocker.patch("src.cli.commands.Console")
@@ -102,7 +104,9 @@ class TestMainCommand:
 
         # Configure config loader
         mock_config_instance = mocks["config_loader"].return_value
-        mock_config_instance.load.return_value = ([], [], None)  # empty channels, buses, and section_splitting
+        default_section_splitting = SectionSplittingConfig()
+        mock_config_instance.load.return_value = ([], [], default_section_splitting)  # empty channels, buses, and default section_splitting
+        mock_config_instance.merge_processing_options.return_value = ([], [], default_section_splitting)
 
         # Configure builder
         mock_builder_instance = mocks["builder"].return_value
@@ -177,7 +181,7 @@ class TestMainCommand:
         mock_extractor_instance.channels = 2
         mock_extractor_instance.cleanup.return_value = None
 
-        mocks["config_loader"].return_value.load.return_value = ([], [])
+        mocks["config_loader"].return_value.load.return_value = ([], [], SectionSplittingConfig())
 
         # Mock logging
         mock_logger = mocker.patch("src.cli.commands.logger")
@@ -363,7 +367,8 @@ class TestMainCommand:
         mock_extractor_instance.channels = 2
         mock_extractor_instance.cleanup.return_value = None
 
-        mocks["config_loader"].return_value.load.return_value = ([], [], None)
+        mocks["config_loader"].return_value.load.return_value = ([], [], SectionSplittingConfig())
+        mocks["config_loader"].return_value.merge_processing_options.return_value = ([], [], SectionSplittingConfig())
 
         # Execute with keep_temp=True
         process(
