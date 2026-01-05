@@ -53,6 +53,16 @@ Audio timing calculations should use **sample positions** (integers) rather than
 
 ---
 
+## Status Key
+
+Each story includes a **Status** section with one of the following values:
+
+- **Done**: Story is fully implemented and tested
+- **Ready to start**: Story prerequisites are complete and can be started immediately
+- **Waiting on dependencies**: Story cannot be started due to incomplete prerequisites
+
+---
+
 ## Story 1: Define Click Analyzer Protocol and Data Models
 
 **Description:**  
@@ -93,6 +103,8 @@ Create the foundational abstractions and data models for click track analysis be
 - Type hints pass mypy checks.
 - All models follow Pydantic v2 API patterns.
 
+**Status:** Done
+
 ---
 
 ## Story 2: Extend Configuration Models for Click Channel and Section Splitting
@@ -125,6 +137,8 @@ Update the Pydantic configuration models in `src/config/` to support the new "cl
 - Existing config loading tests pass.
 - Updated YAML schema examples in documentation.  
 
+**Status:** Done
+
 ---
 
 ## Story 3: Update CLI Interface for Section Splitting Options
@@ -153,6 +167,8 @@ Extend the Typer-based CLI in `src/cli/commands.py` to add the new `--section-by
 - Integration tests verify option precedence (CLI > config > defaults).
 - Rich console output remains consistent.
 - Code follows CLI design patterns established in `src/cli/commands.py`.
+
+**Status:** Done
 
 ---
 
@@ -254,6 +270,8 @@ Create a section processor that takes raw section boundaries from the analyzer, 
 - Property-based tests using Hypothesis for edge cases.
 - Code follows single responsibility - only handles section processing, not audio I/O.
 
+**Status:** Done
+
 ---
 
 ## Story 6: Integrate Section Splitting into Processing Pipeline
@@ -284,9 +302,13 @@ Modify the main processing pipeline in `src/processing/` to optionally split aud
 - Memory-efficient implementation using streaming or temporary files.
 - Code review confirms no breaking changes to existing functionality.
 
+**Status:** Ready to start
+
 ---
 
 ## Story 7: Update Output Directory Structure for Sections
+
+**Status:** Waiting on dependencies
 
 **Description:**  
 Modify the output logic in `src/output/` to create numbered section directories instead of placing tracks directly in the output directory when section splitting is enabled.
@@ -315,6 +337,8 @@ Modify the output logic in `src/output/` to create numbered section directories 
 ---
 
 ## Story 8: Embed BPM Metadata in WAV Files
+
+**Status:** Waiting on dependencies
 
 **Description:**  
 Add functionality to embed detected BPM values into the WAV files of each section using industry-standard metadata. Focus on RIFF INFO chunks for DAW compatibility.
@@ -358,6 +382,8 @@ Follow the interface-first pattern: define a `MetadataWriterProtocol` before imp
 
 ## Story 9: Implement Console Summary Output
 
+**Status:** Waiting on dependencies
+
 **Description:**  
 Add console output functionality to display a Rich-formatted table summarizing detected sections with start times, durations, types, and BPMs.
 
@@ -385,6 +411,8 @@ Add console output functionality to display a Rich-formatted table summarizing d
 ---
 
 ## Story 10: Implement Optional JSON Session Output
+
+**Status:** Waiting on dependencies
 
 **Description:**  
 Add functionality to write a JSON file containing detailed session metadata when the `--session-json` flag is provided.
@@ -428,6 +456,8 @@ Add functionality to write a JSON file containing detailed session metadata when
 
 ## Story 11: Add Comprehensive Error Handling and Fallbacks
 
+**Status:** Waiting on dependencies
+
 **Description:**  
 Implement robust error handling for detection failures, invalid configurations, and edge cases, with appropriate fallbacks to maintain app stability.
 
@@ -464,6 +494,8 @@ Implement robust error handling for detection failures, invalid configurations, 
 
 ## Story 12: Add Signal Processing Dependencies and Update Project Configuration
 
+**Status:** Ready to start
+
 **Description:**  
 Add the required signal processing libraries (NumPy, SciPy, soundfile) as project dependencies and update pyproject.toml. Also add audiometa for metadata writing.
 
@@ -495,6 +527,8 @@ Add the required signal processing libraries (NumPy, SciPy, soundfile) as projec
 ---
 
 ## Story 13: Update Documentation and Final Testing
+
+**Status:** Waiting on dependencies
 
 **Description:**  
 Update README, add comprehensive tests, and ensure all quality checks pass for the new feature.
