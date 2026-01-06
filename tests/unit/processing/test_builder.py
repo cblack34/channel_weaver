@@ -60,6 +60,7 @@ class TestTrackBuilder:
             output_dir=tmp_path / "output",
             keep_temp=False,
             output_handler=mock_output_handler,
+            metadata_writer=None,
         )
 
         # Verify bit depth resolution
@@ -136,6 +137,7 @@ class TestTrackBuilder:
             temp_dir=tmp_path / "temp",
             output_dir=output_dir,
             output_handler=mock_output_handler,
+            metadata_writer=None,
         )
 
         assert output_dir.exists()
@@ -166,6 +168,7 @@ class TestTrackBuilder:
             temp_dir=tmp_path / "temp",
             output_dir=tmp_path / "output",
             output_handler=mock_output_handler,
+            metadata_writer=None,
         )
 
         # Test data
@@ -211,8 +214,7 @@ class TestTrackBuilder:
             bit_depth=BitDepth.FLOAT32,
             temp_dir=tmp_path / "temp",
             output_dir=tmp_path / "output",
-            output_handler=mock_output_handler,
-        )
+            output_handler=mock_output_handler,            metadata_writer=None,        )
 
         builder.build_tracks([], [], {})
 
@@ -254,6 +256,7 @@ class TestTrackBuilder:
             output_dir=tmp_path / "output",
             output_handler=mock_output_handler,
             sections=sections,
+            metadata_writer=None,
         )
 
         # Verify section writers were created with correct parameters

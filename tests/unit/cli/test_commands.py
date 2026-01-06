@@ -158,6 +158,7 @@ class TestMainCommand:
             keep_temp=False,
             console=mocks["console"].return_value,
             sections=[],
+            metadata_writer=mocker.ANY,  # MutagenMetadataWriter instance
         )
         mock_builder_instance.build_tracks.assert_called_once_with([], [], {})
 

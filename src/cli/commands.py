@@ -10,8 +10,9 @@ from rich.console import Console
 from src.constants import VERSION
 from src.exceptions import ConfigError, AudioProcessingError, YAMLConfigError
 from src.audio.extractor import AudioExtractor
-from src.processing.builder import TrackBuilder
+from src.output.metadata import MutagenMetadataWriter
 from src.processing.section_splitter import SectionSplitter
+from src.processing.builder import TrackBuilder
 from src.config import ConfigLoader, CHANNELS, BUSES, BitDepth, ProcessingOptions
 from src.config.resolver import ConfigResolver
 from src.cli.utils import _sanitize_path, _ensure_output_path, _determine_temp_dir
@@ -210,6 +211,7 @@ def process(
         segments, section_info = section_splitter.split_segments_if_enabled(segments, channels)
 
         # Build tracks
+        metadata_writer = MutagenMetadataWriter()
         builder = TrackBuilder(
             sample_rate=extractor.sample_rate,  # type: ignore[arg-type]
             bit_depth=bit_depth,
@@ -219,6 +221,7 @@ def process(
             keep_temp=keep_temp,
             console=console,
             sections=section_info,
+            metadata_writer=metadata_writer,
         )
         builder.build_tracks(channels, buses, segments)
 

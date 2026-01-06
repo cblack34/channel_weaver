@@ -21,12 +21,12 @@ The following technical decisions guide the implementation:
 - **Installation**: All libraries are available via `uv add numpy scipy soundfile`.
 - **Architecture Note**: Implement behind a protocol/abstract interface (`ClickAnalyzerProtocol`) to allow future replacement with alternative implementations if needed, following the Dependency Inversion Principle.
 
-### WAV Metadata Embedding: Industry Standard RIFF Chunks
-- **Decision**: Use industry-standard RIFF INFO chunks for WAV metadata rather than non-standard ID3 tags in WAV files.
-- **Recommended Library**: [audiometa](https://github.com/BehindTheMusicTree/audiometa) - supports reading/writing RIFF metadata in WAV files with a unified API.
-- **Alternative**: ffmpeg can also embed metadata via `-metadata` flag if a Python-native solution proves insufficient.
-- **BPM Field**: Use the RIFF INFO `IBPM` chunk or a custom metadata field. Note: RIFF does not have a standardized BPM field, so the chosen approach must be documented in the README.
-- **Fallback**: If RIFF metadata is not supported by target DAWs, the session JSON output serves as the primary metadata source.
+### WAV Metadata Embedding: ID3 Tags with Mutagen
+- **Decision**: Use ID3 tags embedded in WAV files for BPM metadata storage using the TBPM frame.
+- **Rationale**: Research confirmed that RIFF INFO chunks do not have a standardized BPM field. ID3 tags can be embedded in WAV files and provide the TBPM frame specifically for BPM values, which is widely supported by audio applications and DAWs.
+- **Library**: [mutagen](https://github.com/quodlibet/mutagen) - comprehensive Python library for audio metadata manipulation with excellent ID3 tag support.
+- **Implementation**: Use `mutagen.File` to load WAV files and `mutagen.id3.TBPM` to set/read BPM values.
+- **Compatibility**: ID3 tags in WAV files are supported by most professional audio software and can be read by tools like ffprobe and media players.
 
 ### Memory Efficiency: Streaming/Chunked Processing
 - **Decision**: Implement streaming/chunked analysis for click track processing to support multi-hour recordings.
@@ -338,23 +338,27 @@ Modify the output logic in `src/output/` to create numbered section directories 
 
 ## Story 8: Embed BPM Metadata in WAV Files
 
-**Status:** Ready to start
+**Status:** Completed
 
 **Description:**  
-Add functionality to embed detected BPM values into the WAV files of each section using industry-standard metadata. Focus on RIFF INFO chunks for DAW compatibility.
+Add functionality to embed detected BPM values into the WAV files of each section using industry-standard ID3 metadata tags for DAW compatibility.
 
 **Architecture Note:**  
-Follow the interface-first pattern: define a `MetadataWriterProtocol` before implementing concrete writers. This allows swapping implementations (e.g., audiometa vs ffmpeg) without changing consuming code.
+Follow the interface-first pattern: define a `MetadataWriterProtocol` before implementing concrete writers. This allows swapping implementations without changing consuming code.
+
+**Implementation Notes:**
+- Used mutagen library for ID3 TBPM tag support in WAV files
+- ID3 tags can be embedded in WAV files for metadata storage
+- Maintains clean architecture with protocol-based design and dependency injection
 
 **Detailed Requirements:**  
-- Create `src/output/protocols.py` (or add to existing) with a `MetadataWriterProtocol` defining:
+- Create `src/output/protocols.py` with a `MetadataWriterProtocol` defining:
   - `write_bpm(file_path: Path, bpm: int | None) -> bool` - Embed BPM metadata, return success status.
   - `read_bpm(file_path: Path) -> int | None` - Read BPM metadata for verification.
   - Protocol must be `@runtime_checkable`.
-- Create `src/output/metadata.py` with an `AudiometaWriter` class implementing `MetadataWriterProtocol`.
-- Use the [audiometa](https://github.com/BehindTheMusicTree/audiometa) library for RIFF metadata writing.
-- Create an alternative `FfmpegMetadataWriter` class (also implementing `MetadataWriterProtocol`) as a fallback if audiometa doesn't support the required operations.
-- Embed BPM as a comment or custom field (document the exact field used since RIFF has no standard BPM field).
+- Create `src/output/metadata.py` with a `MutagenMetadataWriter` class implementing `MetadataWriterProtocol`.
+- Use the [mutagen](https://github.com/quodlibet/mutagen) library for ID3 tag manipulation.
+- Embed BPM using the standard ID3 `TBPM` frame for BPM values.
 - Set integer BPM values for song sections.
 - For speaking sections: omit BPM metadata or set to empty/zero.
 - Apply to all track files in each section (not just click track).
@@ -364,7 +368,7 @@ Follow the interface-first pattern: define a `MetadataWriterProtocol` before imp
 - Use dependency injection to allow selecting the writer implementation.
 
 **Acceptance Criteria:**  
-- `MetadataWriterProtocol` is defined and both implementations conform to it.
+- `MetadataWriterProtocol` is defined and implementation conforms to it.
 - BPM values are embedded and readable by common audio tools (test with ffprobe, mediainfo).
 - Speaking sections have no BPM metadata or BPM=0.
 - File sizes increase only minimally after embedding.
@@ -372,7 +376,7 @@ Follow the interface-first pattern: define a `MetadataWriterProtocol` before imp
 
 **Definition of Done:**  
 - Protocol defined with complete docstrings.
-- At least one concrete implementation passing all tests.
+- Concrete implementation passing all tests.
 - Unit tests verify metadata embedding and reading.
 - Integration tests check file integrity and audio data preservation.
 - Fallback handling for files where embedding fails (warning logged, processing continues).
@@ -494,16 +498,16 @@ Implement robust error handling for detection failures, invalid configurations, 
 
 ## Story 12: Add Signal Processing Dependencies and Update Project Configuration
 
-**Status:** Ready to start
+**Status:** Completed
 
 **Description:**  
-Add the required signal processing libraries (NumPy, SciPy, soundfile) as project dependencies and update pyproject.toml. Also add audiometa for metadata writing.
+Add the required signal processing libraries (NumPy, SciPy, soundfile) as project dependencies and update pyproject.toml. Also add mutagen for ID3 metadata writing.
 
 **Detailed Requirements:**  
 - Verify `numpy` is already a project dependency; if not, use `uv add numpy` to add it.
 - Use `uv add scipy` to add the SciPy library for signal processing algorithms (`find_peaks`, filtering, FFT).
 - Verify `soundfile` is already a project dependency (likely present for audio I/O); if not, use `uv add soundfile` to add it.
-- Use `uv add audiometa` to add the audiometa library for RIFF metadata writing.
+- Use `uv add mutagen` to add the mutagen library for ID3 metadata writing.
 - Add dependencies using the `uv add <package>` command to ensure proper formatting and version resolution.
 - Run `uv sync` to verify the lock file is updated correctly.
 - Verify all dependencies install correctly on Windows, macOS, and Linux via CI.

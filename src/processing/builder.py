@@ -10,7 +10,8 @@ from src.config import ChannelConfig, BusConfig, BitDepth
 from src.processing.converters.factory import get_converter, resolve_bit_depth
 from src.processing.mono import MonoTrackWriter
 from src.processing.stereo import StereoTrackWriter
-from src.output import OutputHandler, ConsoleOutputHandler
+from src.output.protocols import MetadataWriterProtocol, OutputHandler
+from src.output import ConsoleOutputHandler
 from src.config import SegmentMap
 from src.audio.click.models import SectionInfo
 
@@ -47,6 +48,7 @@ class TrackBuilder:
         console: Console | None = None,
         output_handler: OutputHandler | None = None,
         sections: list[SectionInfo] | None = None,
+        metadata_writer: MetadataWriterProtocol | None = None,
     ) -> None:
         """Initialize the track builder.
 
@@ -62,6 +64,7 @@ class TrackBuilder:
                 if None is provided.
             output_handler: Optional output handler for dependency injection.
             sections: Optional list of section information for section-based output.
+            metadata_writer: Optional metadata writer for embedding BPM information.
         """
         resolved_bit_depth = resolve_bit_depth(bit_depth, source_bit_depth)
         converter = get_converter(resolved_bit_depth)
@@ -71,6 +74,7 @@ class TrackBuilder:
         self.output_dir = output_dir
         self.keep_temp = keep_temp
         self.sections = sections
+        self.metadata_writer = metadata_writer
 
         # Use injected output handler or create default
         self._output_handler = output_handler or ConsoleOutputHandler(console)
@@ -126,4 +130,62 @@ class TrackBuilder:
         """
         self.mono_writer.write_tracks(channels, segments)
         self.stereo_writer.write_tracks(buses, segments)
+
+        # Apply BPM metadata if writer is provided and sections exist
+        if self.metadata_writer and self.sections:
+            self._apply_bpm_metadata()
+
         self._output_handler.info(f"Tracks written to {self.output_dir}")
+
+    def _apply_bpm_metadata(self) -> None:
+        """Apply BPM metadata to all generated WAV files based on section information."""
+        if not self.metadata_writer or not self.sections:
+            return
+
+        # Find all WAV files in output directory (including section subdirs)
+        wav_files = list(self.output_dir.rglob("*.wav"))
+
+        for wav_file in wav_files:
+            # Determine which section this file belongs to
+            bpm = self._get_bpm_for_file(wav_file)
+            if bpm is not None:
+                success = self.metadata_writer.write_bpm(wav_file, bpm)
+                if success:
+                    self._output_handler.info(f"Embedded BPM={bpm} in {wav_file.name}")
+                else:
+                    self._output_handler.warning(f"Failed to embed BPM metadata in {wav_file.name}")
+
+    def _get_bpm_for_file(self, wav_file: Path) -> int | None:
+        """Determine the BPM for a given WAV file based on its path and section info.
+
+        Args:
+            wav_file: Path to the WAV file
+
+        Returns:
+            BPM value for the section this file belongs to, or None
+        """
+        # Extract section number from path (e.g., "section_01/file.wav" -> 1)
+        parts = wav_file.parts
+        section_part = None
+
+        for part in parts:
+            if part.startswith("section_"):
+                section_part = part
+                break
+
+        if section_part and self.sections is not None:
+            try:
+                section_num = int(section_part.split("_")[1])
+                # Find the section with this number (sections are 1-indexed)
+                for section in self.sections:
+                    if section.section_number == section_num:
+                        return section.bpm
+            except (ValueError, IndexError):
+                pass
+
+        # If no section found or file is not in a section directory,
+        # check if there's only one section and apply its BPM
+        if self.sections is not None and len(self.sections) == 1:
+            return self.sections[0].bpm
+
+        return None
