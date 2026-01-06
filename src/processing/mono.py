@@ -21,7 +21,7 @@ class MonoTrackWriter:
         sample_rate: int,
         converter: BitDepthConverter,
         output_dir: Path,
-        output_handler: OutputHandler
+        output_handler: OutputHandler,
     ) -> None:
         """Initialize the mono track writer.
 
@@ -44,6 +44,7 @@ class MonoTrackWriter:
             segments: Dictionary mapping channel numbers to segment file lists
         """
         process_channels = [c for c in channels if c.action == ChannelAction.PROCESS]
+        
         for ch_config in tqdm(process_channels, desc="Building mono tracks", unit="track"):
             self._write_track(ch_config, segments)
 

@@ -308,7 +308,7 @@ Modify the main processing pipeline in `src/processing/` to optionally split aud
 
 ## Story 7: Update Output Directory Structure for Sections
 
-**Status:** Ready to start
+**Status:** Done
 
 **Description:**  
 Modify the output logic in `src/output/` to create numbered section directories instead of placing tracks directly in the output directory when section splitting is enabled.
@@ -561,6 +561,31 @@ Update README, add comprehensive tests, and ensure all quality checks pass for t
 - Feature can be used end-to-end following README instructions.
 - Code review feedback addressed.
 - Feature ready for production use.
+
+---
+
+## TODO
+
+### Architecture Review and SOLID Principles Evaluation
+- **Description**: Conduct a comprehensive review of the current architecture to ensure adherence to SOLID principles and best practices. Focus on identifying any violations of the Open-Closed Principle, Single Responsibility Principle, and other design patterns that may have emerged during implementation.
+- **Key Areas to Review**:
+  - **Open-Closed Principle**: Ensure classes are open for extension but closed for modification. Evaluate recent refactoring of track writers to use inheritance instead of modifying existing classes.
+  - **Single Responsibility Principle**: Verify each class has a single, well-defined responsibility. Check for classes that may be doing too much (e.g., combining data processing with output formatting).
+  - **Dependency Inversion**: Ensure high-level modules don't depend on low-level modules but both depend on abstractions (protocols).
+  - **Interface Segregation**: Review protocols to ensure they are focused and not forcing implementations to depend on methods they don't use.
+  - **Liskov Substitution**: Verify that derived classes can be substituted for their base classes without breaking functionality.
+- **Actions Required**:
+  - Document current architecture patterns and identify any anti-patterns
+  - Create a refactoring plan for any identified issues
+  - Implement fixes following SOLID principles
+  - Add architectural decision records for future reference
+  - Update code comments to reflect design intentions
+- **Success Criteria**:
+  - Architecture follows SOLID principles consistently
+  - Code is maintainable and extensible
+  - Classes have clear, single responsibilities
+  - Dependencies are properly abstracted
+  - Future feature additions won't require modifying existing stable classes
 
 ---
 

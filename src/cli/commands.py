@@ -218,6 +218,7 @@ def process(
             output_dir=output_dir,
             keep_temp=keep_temp,
             console=console,
+            sections=section_info,
         )
         builder.build_tracks(channels, buses, segments)
 

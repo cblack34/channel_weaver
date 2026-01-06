@@ -157,6 +157,7 @@ class TestMainCommand:
             output_dir=output_path,
             keep_temp=False,
             console=mocks["console"].return_value,
+            sections=[],
         )
         mock_builder_instance.build_tracks.assert_called_once_with([], [], {})
 
