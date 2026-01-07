@@ -56,7 +56,8 @@ class TestScipyClickAnalyzer:
             assert len(onsets) == 2
             assert onsets == [100, 200]
 
-            mock_soundfile.assert_called_once_with(audio_path)
+            # soundfile requires string paths, so we convert Path to str
+            mock_soundfile.assert_called_once_with(str(audio_path))
 
     @pytest.mark.parametrize("sample_rate", [44100, 48000, 96000])
     @patch('src.audio.click.analyzer.sf.SoundFile')
@@ -104,7 +105,7 @@ class TestScipyClickAnalyzer:
     def test_create_single_speaking_section(self, mock_soundfile, analyzer: ScipyClickAnalyzer, sample_rate: int) -> None:
         """Test creating single speaking section for no-click files."""
         mock_sf = MagicMock()
-        mock_sf.frames = 100000
+        mock_sf.__len__ = MagicMock(return_value=100000)
         mock_soundfile.return_value.__enter__.return_value = mock_sf
 
         boundaries = analyzer._create_single_speaking_section(Path("test.wav"), sample_rate)

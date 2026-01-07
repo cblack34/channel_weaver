@@ -14,16 +14,16 @@ from src.config import ChannelConfig, SegmentMap
 from src.config.models import SectionSplittingConfig
 from src.config.enums import ChannelAction
 from src.exceptions import AudioProcessingError
+from src.output.protocols import MetadataWriterProtocol
 
 
 class SectionSplitter:
-    """Splits audio segments into sections based on click track analysis.
+    """Splits audio tracks into sections based on click track analysis.
 
     This class coordinates the section splitting process:
-    1. Identifies the click channel from configuration
-    2. Analyzes the click track to detect section boundaries
-    3. Splits all audio segments at the detected boundaries
-    4. Returns the split segments for track building
+    1. Analyzes the click track to detect section boundaries
+    2. Splits final output tracks at the detected boundaries
+    3. Applies BPM metadata to section files
     """
 
     def __init__(
@@ -50,28 +50,129 @@ class SectionSplitter:
         self.analyzer = ScipyClickAnalyzer(section_splitting)
         self.processor = SectionProcessor()
 
-    def split_segments_if_enabled(
+    def analyze_final_click_track(
+        self,
+        output_dir: Path,
+        channels: list[ChannelConfig],
+    ) -> list[SectionInfo]:
+        """Analyze the final concatenated click track to get section boundaries.
+
+        This method should be called AFTER TrackBuilder has created all tracks,
+        so the click track is already concatenated into a single file.
+
+        Args:
+            output_dir: Directory containing the final output tracks
+            channels: Channel configurations
+
+        Returns:
+            List of section information, or empty list if disabled or no sections found
+
+        Raises:
+            AudioProcessingError: If section splitting is enabled but fails
+        """
+        if not self.section_splitting.enabled:
+            return []
+
+        self.console.print("[dim]Section splitting enabled, analyzing click track...[/dim]")
+
+        # Find the click channel
+        click_channel = self._find_click_channel(channels)
+        if click_channel is None:
+            raise AudioProcessingError("No click channel found for section splitting")
+
+        # Find the click track file in output directory
+        click_track_path = self._find_click_track_file(output_dir, click_channel)
+        if click_track_path is None:
+            raise AudioProcessingError(
+                f"Click track file not found in output directory for channel {click_channel.ch}"
+            )
+
+        self.console.print(f"[dim]Analyzing click track: {click_track_path.name}[/dim]")
+
+        # Analyze the final concatenated click track
+        sections = self._analyze_final_track(click_track_path)
+
+        if not sections:
+            self.console.print("[yellow]Warning: No sections detected in click track[/yellow]")
+            return []
+
+        self.console.print(f"[dim]Detected {len(sections)} sections[/dim]")
+        return sections
+
+    def _find_click_track_file(self, output_dir: Path, click_channel: ChannelConfig) -> Path | None:
+        """Find the click track file in the output directory.
+
+        Args:
+            output_dir: Directory containing final output tracks
+            click_channel: Click channel configuration
+
+        Returns:
+            Path to the click track file, or None if not found
+        """
+        from src.output.naming import sanitize_filename
+
+        # Build the expected filename pattern
+        output_ch = click_channel.output_ch or click_channel.ch
+        sanitized_name = sanitize_filename(click_channel.name)
+        expected_filename = f"{output_ch:02d}_{sanitized_name}.wav"
+
+        click_track_path = output_dir / expected_filename
+        if click_track_path.exists():
+            return click_track_path
+
+        # Try to find by channel number prefix as fallback
+        for wav_file in output_dir.glob(f"{output_ch:02d}_*.wav"):
+            return wav_file
+
+        return None
+
+    def _analyze_final_track(self, click_track_path: Path) -> list[SectionInfo]:
+        """Analyze a single concatenated click track file.
+
+        Args:
+            click_track_path: Path to the final concatenated click track
+
+        Returns:
+            List of detected sections with metadata
+
+        Raises:
+            AudioProcessingError: If analysis fails
+        """
+        try:
+            # Analyze the concatenated click track directly
+            boundaries = self.analyzer.analyze(click_track_path, self.sample_rate)
+
+            # Process sections (merge short ones, etc.)
+            sections = SectionProcessor.process_sections(
+                boundaries.sections,
+                self.sample_rate,
+                self.section_splitting.min_section_length_seconds,
+            )
+
+            return sections
+
+        except Exception as e:
+            raise AudioProcessingError(f"Failed to analyze click track: {e}") from e
+
+    def analyze_click_track_if_enabled(
         self,
         segments: SegmentMap,
         channels: list[ChannelConfig],
-    ) -> tuple[SegmentMap, list[SectionInfo]]:
-        """Split segments into sections if section splitting is enabled.
+    ) -> list[SectionInfo]:
+        """Analyze click track to get section boundaries if section splitting is enabled.
 
         Args:
             segments: Original segments from AudioExtractor
             channels: Channel configurations
 
         Returns:
-            Tuple of (split_segments, section_info) where split_segments
-            contains the section-split segments and section_info contains
-            metadata about each section.
+            List of section information, or empty list if disabled or no sections found
 
         Raises:
-            AudioProcessingError: If section splitting fails
+            AudioProcessingError: If section splitting is enabled but fails
         """
         if not self.section_splitting.enabled:
-            # Return original segments with empty section info
-            return segments, []
+            return []
 
         self.console.print("[dim]Section splitting enabled, analyzing click track...[/dim]")
 
@@ -85,13 +186,10 @@ class SectionSplitter:
 
         if not sections:
             self.console.print("[yellow]Warning: No sections detected in click track[/yellow]")
-            return segments, []
+            return []
 
-        # Split all segments at the detected boundaries
-        split_segments = self._split_all_segments(segments, sections)
-
-        self.console.print(f"[dim]Split into {len(sections)} sections[/dim]")
-        return split_segments, sections
+        self.console.print(f"[dim]Detected {len(sections)} sections[/dim]")
+        return sections
 
     def _find_click_channel(self, channels: list[ChannelConfig]) -> ChannelConfig | None:
         """Find the channel configured as the click track.
@@ -141,6 +239,143 @@ class SectionSplitter:
             if click_concat_path.exists():
                 click_concat_path.unlink()
 
+    def split_output_tracks_if_enabled(
+        self,
+        output_dir: Path,
+        sections: list[SectionInfo],
+    ) -> None:
+        """Split final output tracks into sections if section splitting is enabled.
+
+        Args:
+            output_dir: Directory containing final output tracks
+            sections: Section boundaries to split at
+
+        Raises:
+            AudioProcessingError: If splitting fails
+        """
+        if not sections:
+            return
+
+        self.console.print(f"[dim]Splitting {len(sections)} sections into subdirectories...[/dim]")
+
+        # Find all WAV files in output directory (non-recursive, only top level)
+        wav_files = list(output_dir.glob("*.wav"))
+
+        for wav_file in wav_files:
+            try:
+                self._split_single_track(wav_file, sections, output_dir)
+            except Exception as e:
+                raise AudioProcessingError(f"Failed to split track {wav_file.name}: {e}") from e
+
+        # Remove original files after successful splitting
+        for wav_file in wav_files:
+            wav_file.unlink()
+
+        self.console.print(f"[dim]Split {len(wav_files)} tracks into {len(sections)} sections[/dim]")
+
+    def _split_single_track(
+        self,
+        track_path: Path,
+        sections: list[SectionInfo],
+        output_base: Path,
+    ) -> None:
+        """Split a single audio track into section files.
+
+        Args:
+            track_path: Path to the track to split
+            sections: Section boundaries
+            output_base: Base output directory
+
+        Raises:
+            AudioProcessingError: If splitting fails
+        """
+        try:
+            # Read the entire track (soundfile requires string paths)
+            audio_data, sr = sf.read(str(track_path))
+
+            if sr != self.sample_rate:
+                raise AudioProcessingError(
+                    f"Sample rate mismatch: {sr} vs {self.sample_rate}"
+                )
+
+            for section in sections:
+                # Extract section audio
+                start_sample = section.start_sample
+                end_sample = min(section.end_sample, len(audio_data))
+
+                if start_sample >= len(audio_data):
+                    # Section starts beyond the end of audio
+                    continue
+
+                section_audio = audio_data[start_sample:end_sample]
+
+                # Create section directory
+                section_dir = output_base / f"section_{section.section_number:02d}"
+                section_dir.mkdir(parents=True, exist_ok=True)
+
+                # Create output path with same filename
+                output_path = section_dir / track_path.name
+
+                # Write section audio (soundfile requires string paths)
+                sf.write(str(output_path), section_audio, sr)
+
+        except Exception as e:
+            raise AudioProcessingError(f"Failed to split {track_path.name}: {e}") from e
+
+    def apply_metadata(
+        self,
+        output_dir: Path,
+        sections: list[SectionInfo],
+        metadata_writer: MetadataWriterProtocol,
+    ) -> None:
+        """Apply BPM metadata to all section files.
+
+        Args:
+            output_dir: Base output directory containing section folders
+            sections: Section information with BPM data
+            metadata_writer: Writer for embedding metadata
+        """
+        if not metadata_writer or not sections:
+            return
+
+        # Find all WAV files in section subdirectories
+        wav_files = list(output_dir.rglob("*.wav"))
+
+        for wav_file in wav_files:
+            # Determine which section this file belongs to
+            bpm = self._get_bpm_for_file(wav_file, sections)
+            if bpm is not None:
+                try:
+                    metadata_writer.write_bpm(wav_file, bpm)
+                except Exception as e:
+                    self.console.print(f"[yellow]Warning: Failed to write BPM to {wav_file.name}: {e}[/yellow]")
+
+    def _get_bpm_for_file(self, wav_file: Path, sections: list[SectionInfo]) -> int | None:
+        """Determine the BPM for a section file based on its path.
+
+        Args:
+            wav_file: Path to the WAV file
+            sections: Section information
+
+        Returns:
+            BPM value for this file's section, or None
+        """
+        # Extract section number from path (e.g., section_01/file.wav -> section 1)
+        parent_name = wav_file.parent.name
+        if not parent_name.startswith("section_"):
+            return None
+
+        try:
+            section_num = int(parent_name.split("_")[1])
+            # Find matching section (sections are 1-indexed)
+            for section in sections:
+                if section.section_number == section_num:
+                    return section.bpm
+        except (ValueError, IndexError):
+            pass
+
+        return None
+
     def _concatenate_segments(self, segments: list[Path], output_path: Path) -> None:
         """Concatenate multiple audio segments into a single file.
 
@@ -158,15 +393,18 @@ class SectionSplitter:
             # Read all segments and concatenate
             audio_data = []
             for segment_path in segments:
+                self.console.print(f"[dim]Reading segment: {segment_path}[/dim]")
                 # Retry reading the file in case of temporary issues
                 max_retries = 3
                 for attempt in range(max_retries):
                     try:
-                        data, _ = sf.read(segment_path)
+                        data, _ = sf.read(str(segment_path))  # Convert to string explicitly
+                        self.console.print(f"[dim]Successfully read {len(data)} samples from {segment_path.name}[/dim]")
                         break
                     except Exception as read_e:
                         if attempt == max_retries - 1:
                             raise read_e
+                        self.console.print(f"[dim]Retry {attempt + 1} reading {segment_path.name}[/dim]")
                         time.sleep(0.1)  # Wait 100ms before retry
                 
                 if data.ndim == 1:
@@ -177,121 +415,11 @@ class SectionSplitter:
                     audio_data.append(data[:, 0])
 
             concatenated = np.concatenate(audio_data)
+            self.console.print(f"[dim]Concatenated {len(audio_data)} segments into {len(concatenated)} samples[/dim]")
 
-            # Write concatenated audio
-            sf.write(output_path, concatenated, self.sample_rate)
+            # Write concatenated audio (soundfile requires string paths)
+            sf.write(str(output_path), concatenated, self.sample_rate)
+            self.console.print(f"[dim]Wrote concatenated audio to {output_path}[/dim]")
 
         except Exception as e:
             raise AudioProcessingError(f"Failed to concatenate click segments: {e}") from e
-
-    def _split_all_segments(
-        self,
-        segments: SegmentMap,
-        sections: list[SectionInfo]
-    ) -> SegmentMap:
-        """Split all audio segments at the detected section boundaries.
-
-        Args:
-            segments: Original segments keyed by channel number
-            sections: Detected section boundaries
-
-        Returns:
-            Split segments organized by channel and section
-
-        Raises:
-            AudioProcessingError: If splitting fails
-        """
-        split_segments: SegmentMap = {}
-
-        # Get total length of original concatenated audio
-        total_samples = self._get_total_samples(segments)
-
-        for channel_num, channel_segments in segments.items():
-            split_segments[channel_num] = []
-
-            # Concatenate this channel's segments for splitting
-            channel_concat_path = self.temp_dir / f"ch{channel_num:02d}_concat.wav"
-            try:
-                self._concatenate_segments(channel_segments, channel_concat_path)
-
-                # Split the concatenated channel audio at section boundaries
-                section_files = self._split_channel_audio(
-                    channel_concat_path, sections, channel_num, total_samples
-                )
-
-                split_segments[channel_num] = section_files
-
-            finally:
-                # Clean up temporary file
-                if channel_concat_path.exists():
-                    channel_concat_path.unlink()
-
-        return split_segments
-
-    def _get_total_samples(self, segments: SegmentMap) -> int:
-        """Get the total number of samples across all segments for a channel.
-
-        Args:
-            segments: Segments for all channels
-
-        Returns:
-            Total sample count (assumes all channels have same length)
-        """
-        # Use the first channel to determine total length
-        first_channel_segments = next(iter(segments.values()))
-        total_samples = 0
-        for segment_path in first_channel_segments:
-            with sf.SoundFile(segment_path) as f:
-                total_samples += len(f)
-        return total_samples
-
-    def _split_channel_audio(
-        self,
-        channel_concat_path: Path,
-        sections: list[SectionInfo],
-        channel_num: int,
-        total_samples: int
-    ) -> list[Path]:
-        """Split a single channel's concatenated audio into section files.
-
-        Args:
-            channel_concat_path: Path to concatenated channel audio
-            sections: Section boundaries
-            channel_num: Channel number for naming
-            total_samples: Total samples in the concatenated audio
-
-        Returns:
-            List of section audio files
-
-        Raises:
-            AudioProcessingError: If splitting fails
-        """
-        section_files = []
-
-        try:
-            # Read the entire concatenated audio
-            audio_data, _ = sf.read(channel_concat_path)
-
-            for section_idx, section in enumerate(sections, start=1):
-                # Extract section audio
-                start_sample = section.start_sample
-                end_sample = min(section.end_sample, len(audio_data))
-
-                if start_sample >= len(audio_data):
-                    # Section starts beyond the end of audio
-                    continue
-
-                section_audio = audio_data[start_sample:end_sample]
-
-                # Create section file path
-                section_filename = f"ch{channel_num:02d}_section{section_idx:04d}.wav"
-                section_path = self.temp_dir / section_filename
-
-                # Write section audio
-                sf.write(section_path, section_audio, self.sample_rate)
-                section_files.append(section_path)
-
-        except Exception as e:
-            raise AudioProcessingError(f"Failed to split channel {channel_num}: {e}") from e
-
-        return section_files

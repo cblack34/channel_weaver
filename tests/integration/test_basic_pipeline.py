@@ -88,7 +88,6 @@ class TestBasicPipeline:
         channels, buses, section_splitting = config_loader.load()
 
         # Step 3: Build tracks
-        from src.output.metadata import MutagenMetadataWriter
         builder = TrackBuilder(
             sample_rate=extractor.sample_rate,  # type: ignore[arg-type]
             bit_depth=extractor.bit_depth,  # type: ignore[arg-type]
@@ -97,7 +96,6 @@ class TestBasicPipeline:
             output_dir=output_dir,
             keep_temp=True,
             console=None,
-            metadata_writer=MutagenMetadataWriter(),
         )
 
         builder.build_tracks(channels, buses, segments)

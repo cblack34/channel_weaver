@@ -88,19 +88,23 @@ class TestSectionSplittingConfig:
 class TestClickChannelValidation:
     """Tests for click channel validation logic."""
 
-    def test_no_click_channels_when_disabled(self) -> None:
-        """Test that no click channels are allowed when section splitting is disabled."""
+    def test_click_channels_allowed_when_disabled(self) -> None:
+        """Test that click channels are allowed even when section splitting is disabled."""
         channels_data: list[ChannelData] = [
             {"ch": 1, "name": "Kick", "action": "PROCESS"},
-            {"ch": 2, "name": "Snare", "action": "CLICK"},  # This should fail
+            {"ch": 2, "name": "Snare", "action": "CLICK"},  # This should be allowed
         ]
         buses_data: list[BusData] = []
         section_splitting_data = {"enabled": False}
 
         loader = ConfigLoader(channels_data, buses_data, section_splitting_data=section_splitting_data)
-
-        with pytest.raises(ConfigValidationError, match="have action 'click' but section splitting is not enabled"):
-            loader.load()
+        
+        # Should not raise an exception
+        channels, buses, section_splitting = loader.load()
+        
+        # CLICK channel should be preserved (not converted to PROCESS)
+        assert len(channels) == 2
+        assert channels[1].action == ChannelAction.CLICK
 
     def test_multiple_click_channels_when_enabled(self) -> None:
         """Test that multiple click channels are not allowed when section splitting is enabled."""

@@ -60,7 +60,6 @@ class TestTrackBuilder:
             output_dir=tmp_path / "output",
             keep_temp=False,
             output_handler=mock_output_handler,
-            metadata_writer=None,
         )
 
         # Verify bit depth resolution
@@ -137,7 +136,6 @@ class TestTrackBuilder:
             temp_dir=tmp_path / "temp",
             output_dir=output_dir,
             output_handler=mock_output_handler,
-            metadata_writer=None,
         )
 
         assert output_dir.exists()
@@ -168,7 +166,6 @@ class TestTrackBuilder:
             temp_dir=tmp_path / "temp",
             output_dir=tmp_path / "output",
             output_handler=mock_output_handler,
-            metadata_writer=None,
         )
 
         # Test data
@@ -214,63 +211,11 @@ class TestTrackBuilder:
             bit_depth=BitDepth.FLOAT32,
             temp_dir=tmp_path / "temp",
             output_dir=tmp_path / "output",
-            output_handler=mock_output_handler,            metadata_writer=None,        )
+            output_handler=mock_output_handler,
+        )
 
         builder.build_tracks([], [], {})
 
         # Verify writers were called with empty lists
         mock_mono_writer.write_tracks.assert_called_once_with([], {})
         mock_stereo_writer.write_tracks.assert_called_once_with([], {})
-
-    def test_init_with_sections_creates_section_writers(
-        self,
-        mock_converter,
-        mock_output_handler,
-        tmp_path: Path,
-        mocker: MockerFixture,
-    ) -> None:
-        """Test initialization with sections creates section-aware writers."""
-        from src.audio.click.models import SectionInfo
-        from src.audio.click.enums import SectionType
-
-        # Mock the factory functions
-        mocker.patch("src.processing.builder.get_converter", return_value=mock_converter)
-        mocker.patch("src.processing.builder.resolve_bit_depth", return_value=BitDepth.FLOAT32)
-
-        # Mock the section writer classes
-        mock_section_mono_class = mocker.patch("src.output.section_handler.SectionMonoTrackWriter")
-        mock_section_stereo_class = mocker.patch("src.output.section_handler.SectionStereoTrackWriter")
-
-        sections = [SectionInfo(
-            section_number=1,
-            start_sample=0,
-            end_sample=441000,  # 10 seconds at 44100 Hz
-            section_type=SectionType.SONG,
-            bpm=120
-        )]
-
-        TrackBuilder(
-            sample_rate=44100,
-            bit_depth=BitDepth.FLOAT32,
-            temp_dir=tmp_path / "temp",
-            output_dir=tmp_path / "output",
-            output_handler=mock_output_handler,
-            sections=sections,
-            metadata_writer=None,
-        )
-
-        # Verify section writers were created with correct parameters
-        mock_section_mono_class.assert_called_once_with(
-            sections=sections,
-            sample_rate=44100,
-            converter=mock_converter,
-            output_dir=tmp_path / "output",
-            output_handler=mock_output_handler,
-        )
-        mock_section_stereo_class.assert_called_once_with(
-            sections=sections,
-            sample_rate=44100,
-            converter=mock_converter,
-            output_dir=tmp_path / "output",
-            output_handler=mock_output_handler,
-        )

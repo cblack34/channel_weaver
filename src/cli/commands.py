@@ -202,17 +202,7 @@ def process(
         # Extract segments
         segments = extractor.extract_segments(target_bit_depth=bit_depth)
 
-        # Split segments into sections if enabled
-        section_splitter = SectionSplitter(
-            sample_rate=extractor.sample_rate,  # type: ignore[arg-type]
-            temp_dir=temp_root,
-            section_splitting=section_splitting,
-            console=console,
-        )
-        segments, section_info = section_splitter.split_segments_if_enabled(segments, channels)
-
-        # Build tracks
-        metadata_writer = MutagenMetadataWriter()
+        # Build tracks (normal concatenation - this MUST complete first)
         builder = TrackBuilder(
             sample_rate=extractor.sample_rate,  # type: ignore[arg-type]
             bit_depth=bit_depth,
@@ -221,15 +211,33 @@ def process(
             output_dir=output_dir,
             keep_temp=keep_temp,
             console=console,
-            sections=section_info,
-            metadata_writer=metadata_writer,
         )
         builder.build_tracks(channels, buses, segments)
 
-        # Print section summary if sections were created
-        if section_info:
-            output_handler = ConsoleOutputHandler(console)
-            output_handler.print_section_summary(section_info)
+        # Section splitting happens AFTER all tracks are built
+        # This analyzes the final concatenated click track, not the raw segments
+        if section_splitting.enabled:
+            section_splitter = SectionSplitter(
+                sample_rate=extractor.sample_rate,  # type: ignore[arg-type]
+                temp_dir=temp_root,
+                section_splitting=section_splitting,
+                console=console,
+            )
+
+            # Analyze the final concatenated click track from output directory
+            sections = section_splitter.analyze_final_click_track(output_dir, channels)
+
+            if sections:
+                # Split output tracks into sections
+                section_splitter.split_output_tracks_if_enabled(output_dir, sections)
+
+                # Apply BPM metadata to section files
+                metadata_writer = MutagenMetadataWriter()
+                section_splitter.apply_metadata(output_dir, sections, metadata_writer)
+
+                # Print section summary
+                output_handler = ConsoleOutputHandler(console)
+                output_handler.print_section_summary(sections)
 
     except (YAMLConfigError, ConfigError, AudioProcessingError) as e:
         console.print(f"[red]Error:[/red] {e}")

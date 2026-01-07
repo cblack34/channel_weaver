@@ -84,7 +84,7 @@ class ScipyClickAnalyzer(ClickAnalyzerProtocol):
             block_size = int(sample_rate * 0.1)  # 100ms blocks
             total_samples = 0
 
-            with sf.SoundFile(audio_path) as audio_file:
+            with sf.SoundFile(str(audio_path)) as audio_file:
                 for block in audio_file.blocks(blocksize=block_size, dtype='float32'):
                     # Convert to mono if stereo
                     if block.ndim > 1:
@@ -221,8 +221,8 @@ class ScipyClickAnalyzer(ClickAnalyzerProtocol):
         """
         # Get total samples (this is approximate, but good enough for sectioning)
         import soundfile as sf
-        with sf.SoundFile(audio_path) as sf_file:
-            total_samples = sf_file.frames
+        with sf.SoundFile(str(audio_path)) as sf_file:
+            total_samples = len(sf_file)
 
         boundaries = SectionBoundaries()
         boundaries.add_section(SectionInfo(
