@@ -86,6 +86,7 @@ channels:
   name: Vox 3
 - ch: 17
   name: Click
+  action: CLICK
 - ch: 18
   name: Guide
 - ch: 19

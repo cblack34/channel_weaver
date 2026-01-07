@@ -1,5 +1,6 @@
 """Section splitting logic for click-based audio segmentation."""
 
+import time
 from pathlib import Path
 
 import numpy as np
@@ -157,7 +158,17 @@ class SectionSplitter:
             # Read all segments and concatenate
             audio_data = []
             for segment_path in segments:
-                data, _ = sf.read(segment_path)
+                # Retry reading the file in case of temporary issues
+                max_retries = 3
+                for attempt in range(max_retries):
+                    try:
+                        data, _ = sf.read(segment_path)
+                        break
+                    except Exception as read_e:
+                        if attempt == max_retries - 1:
+                            raise read_e
+                        time.sleep(0.1)  # Wait 100ms before retry
+                
                 if data.ndim == 1:
                     # Mono audio
                     audio_data.append(data)

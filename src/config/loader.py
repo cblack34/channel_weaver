@@ -230,10 +230,9 @@ class ConfigLoader:
                     f"Section splitting is enabled but multiple channels have action 'click': {[ch.ch for ch in click_channels]}"
                 )
         else:
-            if len(click_channels) > 0:
-                raise ConfigValidationError(
-                    f"Channels have action 'click' but section splitting is not enabled: {[ch.ch for ch in click_channels]}"
-                )
+            # Convert CLICK channels to PROCESS when section splitting is disabled
+            for ch in click_channels:
+                ch.action = ChannelAction.PROCESS
 
     def _collect_bus_channels(self, buses: list[BusConfig]) -> list[int]:
         """Extract all channel numbers used in bus configurations.

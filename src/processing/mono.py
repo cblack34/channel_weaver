@@ -43,7 +43,9 @@ class MonoTrackWriter:
             channels: List of channel configurations to process
             segments: Dictionary mapping channel numbers to segment file lists
         """
-        process_channels = [c for c in channels if c.action == ChannelAction.PROCESS]
+        process_channels = [
+            c for c in channels if c.action in (ChannelAction.PROCESS, ChannelAction.CLICK)
+        ]
         
         for ch_config in tqdm(process_channels, desc="Building mono tracks", unit="track"):
             self._write_track(ch_config, segments)
