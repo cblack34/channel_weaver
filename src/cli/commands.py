@@ -11,6 +11,7 @@ from src.constants import VERSION
 from src.exceptions import ConfigError, AudioProcessingError, YAMLConfigError
 from src.audio.extractor import AudioExtractor
 from src.output.metadata import MutagenMetadataWriter
+from src.output import ConsoleOutputHandler
 from src.processing.section_splitter import SectionSplitter
 from src.processing.builder import TrackBuilder
 from src.config import ConfigLoader, CHANNELS, BUSES, BitDepth, ProcessingOptions
@@ -224,6 +225,11 @@ def process(
             metadata_writer=metadata_writer,
         )
         builder.build_tracks(channels, buses, segments)
+
+        # Print section summary if sections were created
+        if section_info:
+            output_handler = ConsoleOutputHandler(console)
+            output_handler.print_section_summary(section_info)
 
     except (YAMLConfigError, ConfigError, AudioProcessingError) as e:
         console.print(f"[red]Error:[/red] {e}")

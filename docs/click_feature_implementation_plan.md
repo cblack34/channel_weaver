@@ -386,7 +386,7 @@ Follow the interface-first pattern: define a `MetadataWriterProtocol` before imp
 
 ## Story 9: Implement Console Summary Output
 
-**Status:** Ready to start
+**Status:** Completed
 
 **Description:**  
 Add console output functionality to display a Rich-formatted table summarizing detected sections with start times, durations, types, and BPMs.
