@@ -10,6 +10,11 @@ from src.exceptions.config import (
     YAMLConfigError,
 )
 from src.exceptions.audio import AudioProcessingError
+from src.exceptions.click import (
+    ClickChannelNotFoundError,
+    ClickDetectionError,
+    SectionProcessingError,
+)
 
 __all__ = [
     "ConfigError",
@@ -21,4 +26,7 @@ __all__ = [
     "BusChannelConflictError",
     "YAMLConfigError",
     "AudioProcessingError",
+    "ClickChannelNotFoundError",
+    "ClickDetectionError",
+    "SectionProcessingError",
 ]

@@ -2,13 +2,17 @@
 
 import logging
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated, Optional, TYPE_CHECKING
 
 import typer
 from rich.console import Console
 
+if TYPE_CHECKING:
+    from src.config import ChannelConfig, ProcessingOptions
+    from src.config.models import SectionSplittingConfig
+
 from src.constants import VERSION
-from src.exceptions import ConfigError, AudioProcessingError, YAMLConfigError
+from src.exceptions import ConfigError, AudioProcessingError, YAMLConfigError, ClickChannelNotFoundError
 from src.audio.extractor import AudioExtractor
 from src.output.metadata import MutagenMetadataWriter
 from src.output import ConsoleOutputHandler
@@ -16,6 +20,7 @@ from src.output.session_json import SessionJsonWriter
 from src.processing.section_splitter import SectionSplitter
 from src.processing.builder import TrackBuilder
 from src.config import ConfigLoader, CHANNELS, BUSES, BitDepth, ProcessingOptions
+from src.config.enums import ChannelAction
 from src.config.resolver import ConfigResolver
 from src.cli.utils import _sanitize_path, _ensure_output_path, _determine_temp_dir
 
@@ -200,6 +205,9 @@ def process(
             channels, buses, section_splitting, processing_options
         )
 
+        # Validate configuration early to catch issues before processing
+        _validate_processing_options(channels, section_splitting, processing_options, console)
+
         # Extract segments
         segments = extractor.extract_segments(target_bit_depth=bit_depth)
 
@@ -217,6 +225,7 @@ def process(
 
         # Section splitting happens AFTER all tracks are built
         # This analyzes the final concatenated click track, not the raw segments
+        sections = []
         if section_splitting.enabled:
             section_splitter = SectionSplitter(
                 sample_rate=extractor.sample_rate,  # type: ignore[arg-type]
@@ -225,8 +234,16 @@ def process(
                 console=console,
             )
 
-            # Analyze the final concatenated click track from output directory
-            sections = section_splitter.analyze_final_click_track(output_dir, channels)
+            try:
+                # Analyze the final concatenated click track from output directory
+                sections = section_splitter.analyze_final_click_track(output_dir, channels)
+
+            except ClickChannelNotFoundError as e:
+                # No click channel configured - fall back to normal processing
+                logger.warning(f"Section splitting disabled due to configuration issue: {e}")
+                console.print(f"[yellow]Warning: {e}[/yellow]")
+                console.print("[dim]Continuing with normal long-track output...[/dim]")
+                sections = []  # Disable section splitting
 
             if sections:
                 # Split output tracks into sections
@@ -257,6 +274,40 @@ def process(
     finally:
         if not keep_temp and 'extractor' in locals():
             extractor.cleanup()
+
+
+def _validate_processing_options(
+    channels: list["ChannelConfig"],
+    section_splitting: "SectionSplittingConfig",
+    processing_options: "ProcessingOptions",
+    console: Console,
+) -> None:
+    """Validate processing options and configuration for consistency.
+
+    Args:
+        channels: Loaded channel configurations
+        section_splitting: Section splitting configuration
+        processing_options: CLI processing options
+        console: Rich console for output
+
+    Raises:
+        ClickChannelNotFoundError: If section splitting is enabled but no click channel is configured
+    """
+    # Check for click channel when section splitting is enabled
+    if section_splitting.enabled or processing_options.section_by_click:
+        click_channel = None
+        for channel in channels:
+            if channel.action == ChannelAction.CLICK:
+                click_channel = channel
+                break
+
+        if click_channel is None:
+            error_msg = (
+                "Section splitting is enabled but no click channel is configured. "
+                "Add a channel with action: CLICK to your configuration file."
+            )
+            console.print(f"[red]Configuration Error:[/red] {error_msg}")
+            raise ClickChannelNotFoundError(error_msg)
 
 
 def init_config(

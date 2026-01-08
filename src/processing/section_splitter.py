@@ -1,5 +1,6 @@
 """Section splitting logic for click-based audio segmentation."""
 
+import logging
 import time
 from pathlib import Path
 
@@ -13,7 +14,7 @@ from src.audio.click.section_processor import SectionProcessor
 from src.config import ChannelConfig, SegmentMap
 from src.config.models import SectionSplittingConfig
 from src.config.enums import ChannelAction
-from src.exceptions import AudioProcessingError
+from src.exceptions import AudioProcessingError, ClickChannelNotFoundError, ClickDetectionError, SectionProcessingError
 from src.output.protocols import MetadataWriterProtocol
 
 
@@ -45,6 +46,7 @@ class SectionSplitter:
         self.temp_dir = temp_dir
         self.section_splitting = section_splitting
         self.console = console or Console()
+        self.logger = logging.getLogger(__name__)
 
         # Create analyzer and processor
         self.analyzer = ScipyClickAnalyzer(section_splitting)
@@ -136,7 +138,8 @@ class SectionSplitter:
             List of detected sections with metadata
 
         Raises:
-            AudioProcessingError: If analysis fails
+            ClickDetectionError: If click detection fails
+            SectionProcessingError: If section processing fails
         """
         try:
             # Check if click track has any signal
@@ -155,7 +158,8 @@ class SectionSplitter:
             return sections
 
         except Exception as e:
-            raise AudioProcessingError(f"Failed to analyze click track: {e}") from e
+            self.logger.error(f"Click track analysis failed: {e}")
+            raise ClickDetectionError(f"Failed to analyze click track: {e}") from e
 
     def _check_click_track_signal(self, click_track_path: Path) -> None:
         """Check if the click track has detectable signal.
@@ -210,7 +214,7 @@ class SectionSplitter:
             List of section information, or empty list if disabled or no sections found
 
         Raises:
-            AudioProcessingError: If section splitting is enabled but fails
+            ClickChannelNotFoundError: If section splitting is enabled but no click channel is configured
         """
         if not self.section_splitting.enabled:
             return []
@@ -220,17 +224,73 @@ class SectionSplitter:
         # Find the click channel
         click_channel = self._find_click_channel(channels)
         if click_channel is None:
-            raise AudioProcessingError("No click channel found for section splitting")
+            error_msg = (
+                "No click channel defined in configuration. "
+                "Section splitting requires a channel with action: CLICK. "
+                "Falling back to normal long-track output."
+            )
+            self.logger.warning("Click channel not found for section splitting")
+            self.console.print(f"[yellow]Warning: {error_msg}[/yellow]")
+            raise ClickChannelNotFoundError(error_msg)
 
-        # Analyze click track to get section boundaries
-        sections = self._analyze_click_track(segments[click_channel.ch])
+        try:
+            # Analyze click track to get section boundaries
+            sections = self._analyze_click_track(segments[click_channel.ch])
 
-        if not sections:
-            self.console.print("[yellow]Warning: No sections detected in click track[/yellow]")
-            return []
+            if not sections:
+                # Detection failure - fall back to single section
+                self.logger.warning("No sections detected in click track, falling back to single section")
+                self.console.print("[yellow]Warning: No sections detected in click track. Falling back to single section output.[/yellow]")
+                sections = self._create_fallback_section(segments, click_channel.ch)
 
-        self.console.print(f"[dim]Detected {len(sections)} sections[/dim]")
-        return sections
+            return sections
+
+        except (ClickDetectionError, SectionProcessingError) as e:
+            # Analysis failed - fall back to single section
+            self.logger.warning(f"Click analysis failed: {e}, falling back to single section")
+            self.console.print(f"[yellow]Warning: {e}[/yellow]")
+            return self._create_fallback_section(segments, click_channel.ch)
+
+    def _create_fallback_section(
+        self,
+        segments: SegmentMap,
+        click_channel_number: int,
+    ) -> list[SectionInfo]:
+        """Create a fallback single section spanning all content.
+
+        Args:
+            segments: Original segments from AudioExtractor
+            click_channel_number: The click channel number
+
+        Returns:
+            Single section spanning all content
+        """
+        from src.audio.click.enums import SectionType
+
+        # Calculate total duration from all segments
+        total_samples = 0
+        for segment_path in segments[click_channel_number]:
+            try:
+                with sf.SoundFile(str(segment_path)) as f:
+                    total_samples += len(f)
+            except Exception as e:
+                self.logger.warning(f"Could not read segment {segment_path} for duration calculation: {e}")
+                continue
+
+        if total_samples == 0:
+            # If we can't determine duration, create a minimal section
+            total_samples = self.sample_rate  # 1 second fallback
+
+        # Create single section spanning entire content
+        section = SectionInfo(
+            section_number=1,
+            start_sample=0,
+            end_sample=total_samples,
+            section_type=SectionType.SPEAKING,  # No click detected, so speaking
+            bpm=None,
+        )
+
+        return [section]
 
     def _find_click_channel(self, channels: list[ChannelConfig]) -> ChannelConfig | None:
         """Find the channel configured as the click track.
@@ -256,7 +316,8 @@ class SectionSplitter:
             List of detected sections with metadata
 
         Raises:
-            AudioProcessingError: If analysis fails
+            ClickDetectionError: If click detection fails
+            SectionProcessingError: If section processing fails
         """
         # Concatenate all click segments into a temporary file for analysis
         click_concat_path = self.temp_dir / "click_concat.wav"
@@ -275,10 +336,17 @@ class SectionSplitter:
 
             return sections
 
+        except Exception as e:
+            self.logger.error(f"Click track analysis failed: {e}")
+            raise ClickDetectionError(f"Failed to analyze click track segments: {e}") from e
+
         finally:
             # Clean up temporary file
             if click_concat_path.exists():
-                click_concat_path.unlink()
+                try:
+                    click_concat_path.unlink()
+                except Exception as e:
+                    self.logger.warning(f"Failed to clean up temporary click file: {e}")
 
     def split_output_tracks_if_enabled(
         self,
@@ -292,7 +360,7 @@ class SectionSplitter:
             sections: Section boundaries to split at
 
         Raises:
-            AudioProcessingError: If splitting fails
+            SectionProcessingError: If splitting fails
         """
         if not sections:
             return
@@ -301,25 +369,53 @@ class SectionSplitter:
 
         # Find all WAV files in output directory (non-recursive, only top level)
         wav_files = list(output_dir.glob("*.wav"))
+        created_section_dirs: set[Path] = set()
 
-        for wav_file in wav_files:
+        try:
+            for wav_file in wav_files:
+                try:
+                    new_dirs = self._split_single_track(wav_file, sections, output_dir)
+                    created_section_dirs.update(new_dirs)
+                except Exception as e:
+                    self.logger.error(f"Failed to split track {wav_file.name}: {e}")
+                    raise SectionProcessingError(f"Failed to split track {wav_file.name}: {e}") from e
+
+            # Remove original files after successful splitting
+            for wav_file in wav_files:
+                wav_file.unlink()
+
+            self.console.print(f"[dim]Split {len(wav_files)} tracks into {len(sections)} sections[/dim]")
+
+        except Exception:
+            # Clean up any partially created section directories
+            self._cleanup_partial_sections(created_section_dirs)
+            raise
+
+    def _cleanup_partial_sections(self, section_dirs: set[Path]) -> None:
+        """Clean up partially created section directories.
+
+        Args:
+            section_dirs: Set of section directories to clean up
+        """
+        for section_dir in section_dirs:
             try:
-                self._split_single_track(wav_file, sections, output_dir)
+                if section_dir.exists():
+                    # Remove all files in the directory first
+                    for file_path in section_dir.iterdir():
+                        if file_path.is_file():
+                            file_path.unlink()
+                    # Remove the directory itself
+                    section_dir.rmdir()
+                    self.logger.info(f"Cleaned up partial section directory: {section_dir}")
             except Exception as e:
-                raise AudioProcessingError(f"Failed to split track {wav_file.name}: {e}") from e
-
-        # Remove original files after successful splitting
-        for wav_file in wav_files:
-            wav_file.unlink()
-
-        self.console.print(f"[dim]Split {len(wav_files)} tracks into {len(sections)} sections[/dim]")
+                self.logger.warning(f"Failed to clean up section directory {section_dir}: {e}")
 
     def _split_single_track(
         self,
         track_path: Path,
         sections: list[SectionInfo],
         output_base: Path,
-    ) -> None:
+    ) -> set[Path]:
         """Split a single audio track into section files.
 
         Args:
@@ -327,15 +423,20 @@ class SectionSplitter:
             sections: Section boundaries
             output_base: Base output directory
 
+        Returns:
+            Set of section directories created for this track
+
         Raises:
-            AudioProcessingError: If splitting fails
+            SectionProcessingError: If splitting fails
         """
+        created_dirs: set[Path] = set()
+
         try:
             # Read the entire track (soundfile requires string paths)
             audio_data, sr = sf.read(str(track_path))
 
             if sr != self.sample_rate:
-                raise AudioProcessingError(
+                raise SectionProcessingError(
                     f"Sample rate mismatch: {sr} vs {self.sample_rate}"
                 )
 
@@ -353,6 +454,7 @@ class SectionSplitter:
                 # Create section directory
                 section_dir = output_base / f"section_{section.section_number:02d}"
                 section_dir.mkdir(parents=True, exist_ok=True)
+                created_dirs.add(section_dir)
 
                 # Create output path with same filename
                 output_path = section_dir / track_path.name
@@ -361,7 +463,9 @@ class SectionSplitter:
                 sf.write(str(output_path), section_audio, sr)
 
         except Exception as e:
-            raise AudioProcessingError(f"Failed to split {track_path.name}: {e}") from e
+            raise SectionProcessingError(f"Failed to split {track_path.name}: {e}") from e
+
+        return created_dirs
 
     def apply_metadata(
         self,

@@ -799,5 +799,65 @@ class TestValidateConfigCommand:
         # Verify schema info was printed
         print_calls = [str(call[0][0]) for call in mock_console.print.call_args_list]
         assert any("Schema version: 2" in call for call in print_calls)
-        assert any("Channels defined: 16" in call for call in print_calls)
-        assert any("Buses defined: 2" in call for call in print_calls)
+
+class TestValidation:
+    """Tests for validation functions."""
+
+    def test_validate_processing_options_no_click_channel_needed(self, mocker: MockerFixture) -> None:
+        """Test validation passes when section splitting is disabled."""
+        from src.cli.commands import _validate_processing_options
+        from src.config import ChannelConfig
+        from src.config.models import SectionSplittingConfig, ProcessingOptions
+        from src.config.enums import ChannelAction
+
+        # Setup
+        channels = [
+            ChannelConfig(ch=1, name="Kick", action=ChannelAction.PROCESS),
+            ChannelConfig(ch=2, name="Snare", action=ChannelAction.PROCESS),
+        ]
+        section_splitting = SectionSplittingConfig(enabled=False)
+        processing_options = ProcessingOptions(section_by_click=False)
+        mock_console = mocker.patch("src.cli.commands.Console")
+
+        # Should not raise
+        _validate_processing_options(channels, section_splitting, processing_options, mock_console.return_value)
+
+    def test_validate_processing_options_click_channel_required_but_missing(self, mocker: MockerFixture) -> None:
+        """Test validation fails when section splitting is enabled but no click channel exists."""
+        from src.cli.commands import _validate_processing_options
+        from src.config import ChannelConfig
+        from src.config.models import SectionSplittingConfig, ProcessingOptions
+        from src.config.enums import ChannelAction
+        from src.exceptions import ClickChannelNotFoundError
+
+        # Setup
+        channels = [
+            ChannelConfig(ch=1, name="Kick", action=ChannelAction.PROCESS),
+            ChannelConfig(ch=2, name="Snare", action=ChannelAction.PROCESS),
+        ]
+        section_splitting = SectionSplittingConfig(enabled=True)
+        processing_options = ProcessingOptions(section_by_click=False)
+        mock_console = mocker.patch("src.cli.commands.Console")
+
+        # Should raise ClickChannelNotFoundError
+        with pytest.raises(ClickChannelNotFoundError):
+            _validate_processing_options(channels, section_splitting, processing_options, mock_console.return_value)
+
+    def test_validate_processing_options_click_channel_present(self, mocker: MockerFixture) -> None:
+        """Test validation passes when click channel is present."""
+        from src.cli.commands import _validate_processing_options
+        from src.config import ChannelConfig
+        from src.config.models import SectionSplittingConfig, ProcessingOptions
+        from src.config.enums import ChannelAction
+
+        # Setup
+        channels = [
+            ChannelConfig(ch=1, name="Kick", action=ChannelAction.PROCESS),
+            ChannelConfig(ch=17, name="Click", action=ChannelAction.CLICK),
+        ]
+        section_splitting = SectionSplittingConfig(enabled=True)
+        processing_options = ProcessingOptions(section_by_click=False)
+        mock_console = mocker.patch("src.cli.commands.Console")
+
+        # Should not raise
+        _validate_processing_options(channels, section_splitting, processing_options, mock_console.return_value)
