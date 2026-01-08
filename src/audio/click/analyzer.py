@@ -106,10 +106,11 @@ class ScipyClickAnalyzer(ClickAnalyzerProtocol):
     def _analyze_sections(
         self, onset_samples: list[int], total_samples: int, sample_rate: int
     ) -> SectionBoundaries:
-        """Analyze onset data to create section boundaries based on gaps.
+        """Analyze onset data to create section boundaries based on gaps and BPM changes.
 
         Gaps between click regions are treated as speaking sections.
         Leading and trailing silence are also treated as speaking sections.
+        BPM changes within continuous click regions create new song sections.
 
         Args:
             onset_samples: List of onset positions in samples
@@ -127,7 +128,7 @@ class ScipyClickAnalyzer(ClickAnalyzerProtocol):
         # Convert gap threshold to samples
         gap_threshold_samples = int(self.config.gap_threshold_seconds * sample_rate)
 
-        # First, find song regions (clusters of onsets)
+        # First, find song regions (clusters of onsets separated by gaps)
         song_regions: list[dict] = []
         current_onsets: list[int] = []
 
@@ -159,11 +160,17 @@ class ScipyClickAnalyzer(ClickAnalyzerProtocol):
                 }
             )
 
+        # Split song regions by BPM changes
+        split_song_regions: list[dict] = []
+        for region in song_regions:
+            sub_regions = self._split_by_bpm_changes(region, sample_rate)
+            split_song_regions.extend(sub_regions)
+
         # Now build complete section list with speaking sections in gaps
         sections_data: list[dict] = []
         current_pos = 0
 
-        for song_region in song_regions:
+        for song_region in split_song_regions:
             # Check if there's a speaking section before this song
             if song_region["start"] - current_pos >= gap_threshold_samples:
                 sections_data.append(
@@ -219,6 +226,139 @@ class ScipyClickAnalyzer(ClickAnalyzerProtocol):
             )
 
         return boundaries
+
+    def _split_by_bpm_changes(
+        self, region: dict, sample_rate: int
+    ) -> list[dict]:
+        """Split a song region into sub-regions based on BPM changes.
+
+        Args:
+            region: Dictionary with 'start', 'end', and 'onsets' keys
+            sample_rate: Sample rate
+
+        Returns:
+            List of sub-region dictionaries
+        """
+        onsets = region["onsets"]
+
+        # Need enough onsets to detect BPM changes
+        if len(onsets) < 8:
+            return [region]
+
+        # Find BPM change points by analyzing inter-onset intervals
+        change_indices = self._find_bpm_change_points(onsets, sample_rate)
+
+        if not change_indices:
+            return [region]
+
+        # Split region at change points
+        sub_regions: list[dict] = []
+        prev_idx = 0
+
+        for change_idx in change_indices:
+            if change_idx > prev_idx and change_idx < len(onsets):
+                sub_onsets = onsets[prev_idx:change_idx]
+                if len(sub_onsets) >= 4:
+                    sub_regions.append(
+                        {
+                            "start": sub_onsets[0],
+                            "end": sub_onsets[-1] + int(0.1 * sample_rate),
+                            "onsets": sub_onsets,
+                        }
+                    )
+                prev_idx = change_idx
+
+        # Add final sub-region
+        if prev_idx < len(onsets):
+            sub_onsets = onsets[prev_idx:]
+            if len(sub_onsets) >= 4:
+                sub_regions.append(
+                    {
+                        "start": sub_onsets[0],
+                        "end": sub_onsets[-1] + int(0.1 * sample_rate),
+                        "onsets": sub_onsets,
+                    }
+                )
+
+        return sub_regions if sub_regions else [region]
+
+    def _find_bpm_change_points(
+        self, onsets: list[int], sample_rate: int
+    ) -> list[int]:
+        """Find indices where BPM changes significantly.
+
+        Uses a sliding window to calculate local BPM and detects
+        significant changes between consecutive windows.
+
+        Args:
+            onsets: List of onset sample positions
+            sample_rate: Sample rate
+
+        Returns:
+            List of onset indices where BPM changes
+        """
+        if len(onsets) < 8:
+            return []
+
+        # Calculate inter-onset intervals
+        iois = []
+        for i in range(1, len(onsets)):
+            ioi_seconds = (onsets[i] - onsets[i - 1]) / sample_rate
+            if ioi_seconds > 0:
+                iois.append(60.0 / ioi_seconds)  # Convert to BPM
+
+        if len(iois) < 4:
+            return []
+
+        # Use a sliding window to calculate local median BPM
+        window_size = max(4, min(16, len(iois) // 4))
+        half_window = window_size // 2
+
+        change_points: list[int] = []
+        prev_bpm = None
+
+        for i in range(len(iois)):
+            # Calculate median BPM in window around this point
+            start = max(0, i - half_window)
+            end = min(len(iois), i + half_window + 1)
+            window_bpms = iois[start:end]
+
+            # Filter outliers (BPM outside valid range)
+            valid_bpms = [
+                b for b in window_bpms
+                if self.config.min_bpm <= b <= self.config.max_bpm
+            ]
+
+            if not valid_bpms:
+                continue
+
+            current_bpm = float(np.median(valid_bpms))
+
+            if prev_bpm is not None:
+                bpm_diff = abs(current_bpm - prev_bpm)
+                # Detect significant BPM change (threshold based on config)
+                if bpm_diff >= self.config.bpm_change_threshold:
+                    # Add 1 because iois index is offset from onsets index
+                    change_points.append(i + 1)
+                    prev_bpm = current_bpm
+            else:
+                prev_bpm = current_bpm
+
+        # Filter out changes that are too close together (within 2 seconds)
+        min_samples_between = int(2.0 * sample_rate)
+        filtered_points: list[int] = []
+
+        for idx in change_points:
+            if idx >= len(onsets):
+                continue
+            if not filtered_points:
+                filtered_points.append(idx)
+            else:
+                last_idx = filtered_points[-1]
+                if onsets[idx] - onsets[last_idx] >= min_samples_between:
+                    filtered_points.append(idx)
+
+        return filtered_points
 
     def _estimate_bpm_from_onsets(
         self, onsets: list[int], sample_rate: int

@@ -32,13 +32,14 @@ def generate_synthetic_click_track(output_path: Path, sample_rate: int = 48000):
     
     sections = [
         {"bpm": 120, "duration": 60.0, "name": "120 BPM song"},
+        {"bpm": 82, "duration": 60.0, "name": "82 BPM song"},
         {"bpm": None, "duration": 35.0, "name": "Gap"},
-        {"bpm": 100, "duration": 90.0, "name": "100 BPM song"},
+        {"bpm": 90, "duration": 90.0, "name": "90 BPM song"},
+        {"bpm": 110, "duration": 60.0, "name": "110 BPM song"},
         {"bpm": None, "duration": 28.0, "name": "Gap"},
         {"bpm": 140, "duration": 45.0, "name": "140 BPM song"},
         {"bpm": None, "duration": 12.0, "name": "Gap"},
         {"bpm": 80, "duration": 120.0, "name": "80 BPM song"},
-        {"bpm": None, "duration": 15.0, "name": "Gap"},
         {"bpm": None, "duration": 60.0, "name": "Speaking section"},
     ]
     
