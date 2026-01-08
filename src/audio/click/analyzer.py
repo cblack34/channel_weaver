@@ -17,10 +17,10 @@ class ScipyClickAnalyzer(ClickAnalyzerProtocol):
     """Click track analyzer using NumPy/SciPy for onset detection and BPM estimation.
 
     This implementation uses signal processing techniques to:
-    - Detect click onsets using bandpass filtering and peak detection
+    - Detect click onsets using envelope analysis and peak detection
     - Estimate BPM from inter-onset intervals
-    - Identify section boundaries based on click presence and BPM changes
-    - Merge short sections according to configuration
+    - Identify section boundaries based on gaps between clicks
+    - Detect trailing silence as speaking sections
     """
 
     def __init__(self, config: SectionSplittingConfig) -> None:
@@ -45,200 +45,75 @@ class ScipyClickAnalyzer(ClickAnalyzerProtocol):
             AudioProcessingError: If audio analysis fails
         """
         try:
+            # Load entire audio file for holistic analysis
+            audio, sr = sf.read(str(audio_path))
+            if audio.ndim > 1:
+                audio = np.mean(audio, axis=1)
+
+            total_samples = len(audio)
+
             # Detect all onsets in the file
-            onset_samples = self.detect_onsets(audio_path, sample_rate)
+            onset_samples = self._detect_onsets(audio, sr)
 
             if not onset_samples:
                 # No clicks detected - treat entire file as speaking section
-                return self._create_single_speaking_section(audio_path, sample_rate)
+                return self._create_single_speaking_section(total_samples)
 
-            # Analyze sections based on onsets and BPM changes
-            boundaries = self._analyze_sections(onset_samples, sample_rate)
+            # Analyze sections based on onset gaps
+            boundaries = self._analyze_sections(onset_samples, total_samples, sr)
 
             # Merge short sections if configured
             if self.config.min_section_length_seconds > 0:
-                boundaries = self._merge_short_sections(boundaries, sample_rate)
+                boundaries = self._merge_short_sections(boundaries, sr)
 
             return boundaries
 
         except Exception as e:
             raise AudioProcessingError(f"Failed to analyze click track: {e}") from e
 
-    def detect_onsets(self, audio_path: Path, sample_rate: int) -> list[int]:
-        """Detect onset positions in the audio file using signal processing.
+    def _detect_onsets(self, audio: np.ndarray, sample_rate: int) -> list[int]:
+        """Detect onset positions in the audio using envelope analysis.
 
         Args:
-            audio_path: Path to the audio file to analyze
-            sample_rate: Sample rate of the audio file
-
-        Returns:
-            List of onset positions in samples
-
-        Raises:
-            AudioProcessingError: If onset detection fails
-        """
-        try:
-            onset_samples = []
-
-            # Process audio in blocks for memory efficiency
-            block_size = int(sample_rate * 0.1)  # 100ms blocks
-            total_samples = 0
-
-            with sf.SoundFile(str(audio_path)) as audio_file:
-                for block in audio_file.blocks(blocksize=block_size, dtype='float32'):
-                    # Convert to mono if stereo
-                    if block.ndim > 1:
-                        block = np.mean(block, axis=1)
-
-                    # Detect onsets in this block
-                    block_onsets = self._detect_onsets_in_block(block, sample_rate)
-                    
-                    # Convert block-relative samples to file-absolute samples
-                    for onset in block_onsets:
-                        onset_samples.append(total_samples + onset)
-
-                    total_samples += len(block)
-
-            return onset_samples
-
-        except Exception as e:
-            raise AudioProcessingError(f"Failed to detect onsets: {e}") from e
-
-    def _detect_onsets_in_block(self, audio_block: np.ndarray, sample_rate: int) -> list[int]:
-        """Detect onset positions within a single audio block.
-
-        Args:
-            audio_block: Audio samples for this block
+            audio: Audio samples (mono)
             sample_rate: Sample rate of the audio
 
         Returns:
-            List of onset positions relative to the start of the block
+            List of onset positions in samples
         """
-        # Apply bandpass filter to isolate click frequencies
-        filtered = self._apply_bandpass_filter(audio_block, sample_rate)
-
         # Compute envelope using Hilbert transform
-        envelope = np.abs(signal.hilbert(filtered))
+        envelope = np.abs(signal.hilbert(audio))
 
-        # Compute novelty function (first derivative of envelope)
-        novelty = np.diff(envelope, prepend=envelope[0])
+        # Smooth envelope with configurable window
+        window_size = max(1, int(self.config.novelty_window * sample_rate))
+        if window_size > 1:
+            smoothed = signal.convolve(
+                envelope, np.ones(window_size) / window_size, mode="same"
+            )
+        else:
+            smoothed = envelope
 
-        # Rectify and smooth novelty function
-        novelty = np.maximum(novelty, 0)
-        window_size = int(self.config.novelty_window * sample_rate)
-        if window_size > 0:
-            novelty = signal.convolve(novelty, np.ones(window_size)/window_size, mode='same')
-
-        # Find peaks in novelty function
-        min_distance_samples = int(self.config.min_peak_distance * sample_rate)
+        # Find onset peaks
+        min_distance_samples = max(1, int(self.config.min_peak_distance * sample_rate))
         peaks, _ = signal.find_peaks(
-            novelty,
+            smoothed,
             distance=min_distance_samples,
-            prominence=self.config.peak_prominence
+            prominence=self.config.peak_prominence,
         )
 
         return peaks.tolist()
 
-    def _apply_bandpass_filter(self, audio: np.ndarray, sample_rate: int) -> np.ndarray:
-        """Apply bandpass filter to isolate click frequencies.
+    def _analyze_sections(
+        self, onset_samples: list[int], total_samples: int, sample_rate: int
+    ) -> SectionBoundaries:
+        """Analyze onset data to create section boundaries based on gaps.
 
-        Args:
-            audio: Input audio signal
-            sample_rate: Sample rate of the audio
-
-        Returns:
-            Filtered audio signal
-        """
-        # Design bandpass filter
-        sos = signal.butter(
-            self.config.filter_order,
-            [self.config.bandpass_low, self.config.bandpass_high],
-            btype='bandpass',
-            fs=sample_rate,
-            output='sos'
-        )
-
-        # Apply filter
-        filtered = signal.sosfilt(sos, audio)
-        return filtered
-
-    def estimate_bpm(
-        self,
-        onset_samples: list[int],
-        sample_rate: int,
-        window_start_sample: int,
-        window_end_sample: int,
-    ) -> float | None:
-        """Estimate BPM for a specific sample range using onset data.
+        Gaps between click regions are treated as speaking sections.
+        Leading and trailing silence are also treated as speaking sections.
 
         Args:
             onset_samples: List of onset positions in samples
-            sample_rate: Sample rate of the audio
-            window_start_sample: Start of the analysis window in samples
-            window_end_sample: End of the analysis window in samples
-
-        Returns:
-            Estimated BPM as float, or None if estimation fails
-        """
-        # Filter onsets within the window
-        window_onsets = [
-            onset for onset in onset_samples
-            if window_start_sample <= onset <= window_end_sample
-        ]
-
-        if len(window_onsets) < 4:  # Need at least 4 onsets for reliable BPM
-            return None
-
-        # Calculate inter-onset intervals (IOI) in seconds
-        iois = []
-        for i in range(1, len(window_onsets)):
-            ioi_seconds = (window_onsets[i] - window_onsets[i-1]) / sample_rate
-            iois.append(ioi_seconds)
-
-        if not iois:
-            return None
-
-        # Estimate BPM from median IOI
-        # BPM = 60 / median_IOI
-        median_ioi = np.median(iois)
-        bpm = 60.0 / median_ioi
-
-        # Validate BPM range (reasonable for music: 60-200 BPM)
-        if self.config.min_bpm <= bpm <= self.config.max_bpm:
-            return float(bpm)
-
-        return None
-
-    def _create_single_speaking_section(self, audio_path: Path, sample_rate: int) -> SectionBoundaries:
-        """Create a single speaking section for files with no detected clicks.
-
-        Args:
-            audio_path: Path to the audio file
-            sample_rate: Sample rate
-
-        Returns:
-            SectionBoundaries with single speaking section
-        """
-        # Get total samples (this is approximate, but good enough for sectioning)
-        import soundfile as sf
-        with sf.SoundFile(str(audio_path)) as sf_file:
-            total_samples = len(sf_file)
-
-        boundaries = SectionBoundaries()
-        boundaries.add_section(SectionInfo(
-            section_number=1,
-            start_sample=0,
-            end_sample=total_samples,
-            section_type=SectionType.SPEAKING,
-            bpm=None
-        ))
-        return boundaries
-
-    def _analyze_sections(self, onset_samples: list[int], sample_rate: int) -> SectionBoundaries:
-        """Analyze onset data to create section boundaries.
-
-        Args:
-            onset_samples: List of onset positions in samples
+            total_samples: Total number of samples in the file
             sample_rate: Sample rate
 
         Returns:
@@ -252,96 +127,160 @@ class ScipyClickAnalyzer(ClickAnalyzerProtocol):
         # Convert gap threshold to samples
         gap_threshold_samples = int(self.config.gap_threshold_seconds * sample_rate)
 
-        # Initialize section tracking
-        current_section_start = 0
-        current_bpm = None
-        section_number = 1
+        # First, find song regions (clusters of onsets)
+        song_regions: list[dict] = []
+        current_onsets: list[int] = []
 
-        # Process onsets to find section boundaries
         for i, onset in enumerate(onset_samples):
-            # Check if this onset starts a new section
             if i == 0:
-                # First onset - start first section
-                current_section_start = 0
+                current_onsets.append(onset)
             else:
-                # Check gap before this onset
-                gap_samples = onset - onset_samples[i-1]
-                if gap_samples >= gap_threshold_samples:
-                    # Gap detected - end current section and start new one
-                    self._add_section(
-                        boundaries, section_number, current_section_start,
-                        onset_samples[i-1], current_bpm, sample_rate
+                gap = onset - onset_samples[i - 1]
+                if gap >= gap_threshold_samples:
+                    # Gap detected - finalize current song region
+                    song_regions.append(
+                        {
+                            "start": current_onsets[0],
+                            "end": current_onsets[-1] + int(0.1 * sample_rate),
+                            "onsets": current_onsets.copy(),
+                        }
                     )
-                    section_number += 1
-                    current_section_start = onset
-                    current_bpm = None
+                    current_onsets = [onset]
+                else:
+                    current_onsets.append(onset)
 
-            # Estimate BPM for current section
-            if current_bpm is None:
-                # Try to estimate BPM from recent onsets
-                bpm_window_samples = int(self.config.bpm_window_seconds * sample_rate)
-                window_start = max(0, onset - bpm_window_samples // 2)
-                window_end = onset + bpm_window_samples // 2
+        # Add final song region
+        if current_onsets:
+            song_regions.append(
+                {
+                    "start": current_onsets[0],
+                    "end": current_onsets[-1] + int(0.1 * sample_rate),
+                    "onsets": current_onsets.copy(),
+                }
+            )
 
-                estimated_bpm = self.estimate_bpm(
-                    onset_samples, sample_rate, window_start, window_end
+        # Now build complete section list with speaking sections in gaps
+        sections_data: list[dict] = []
+        current_pos = 0
+
+        for song_region in song_regions:
+            # Check if there's a speaking section before this song
+            if song_region["start"] - current_pos >= gap_threshold_samples:
+                sections_data.append(
+                    {
+                        "start": current_pos,
+                        "end": song_region["start"],
+                        "onsets": [],
+                        "type": SectionType.SPEAKING,
+                    }
                 )
 
-                if estimated_bpm is not None:
-                    # Check if BPM changed significantly
-                    if current_bpm is not None:
-                        bpm_change = abs(estimated_bpm - current_bpm)
-                        if bpm_change >= self.config.bpm_change_threshold:
-                            # BPM change detected - split section
-                            self._add_section(
-                                boundaries, section_number, current_section_start,
-                                onset, current_bpm, sample_rate
-                            )
-                            section_number += 1
-                            current_section_start = onset
+            # Add the song section
+            sections_data.append(
+                {
+                    "start": song_region["start"],
+                    "end": song_region["end"],
+                    "onsets": song_region["onsets"],
+                    "type": SectionType.SONG,
+                }
+            )
+            current_pos = song_region["end"]
 
-                    current_bpm = estimated_bpm
+        # Check for trailing silence (speaking section at end)
+        if total_samples - current_pos >= gap_threshold_samples:
+            sections_data.append(
+                {
+                    "start": current_pos,
+                    "end": total_samples,
+                    "onsets": [],
+                    "type": SectionType.SPEAKING,
+                }
+            )
 
-        # Add final section
-        if onset_samples:
-            self._add_section(
-                boundaries, section_number, current_section_start,
-                onset_samples[-1], current_bpm, sample_rate
+        # Calculate BPM and create SectionInfo objects
+        for i, section_data in enumerate(sections_data, 1):
+            bpm = None
+            if (
+                section_data["type"] == SectionType.SONG
+                and len(section_data["onsets"]) >= 4
+            ):
+                bpm = self._estimate_bpm_from_onsets(
+                    section_data["onsets"], sample_rate
+                )
+
+            boundaries.add_section(
+                SectionInfo(
+                    section_number=i,
+                    start_sample=section_data["start"],
+                    end_sample=section_data["end"],
+                    section_type=section_data["type"],
+                    bpm=int(round(bpm)) if bpm else None,
+                )
             )
 
         return boundaries
 
-    def _add_section(
-        self,
-        boundaries: SectionBoundaries,
-        section_number: int,
-        start_sample: int,
-        end_sample: int,
-        bpm: float | None,
-        sample_rate: int
-    ) -> None:
-        """Add a section to the boundaries.
+    def _estimate_bpm_from_onsets(
+        self, onsets: list[int], sample_rate: int
+    ) -> float | None:
+        """Estimate BPM from a list of onset sample positions.
 
         Args:
-            boundaries: SectionBoundaries to add to
-            section_number: Section number
-            start_sample: Start sample
-            end_sample: End sample
-            bpm: BPM estimate
+            onsets: List of onset positions in samples
             sample_rate: Sample rate
+
+        Returns:
+            Estimated BPM or None if cannot be determined
         """
-        section_type = SectionType.SONG if bpm is not None else SectionType.SPEAKING
-        bpm_int = int(round(bpm)) if bpm is not None else None
+        if len(onsets) < 4:
+            return None
 
-        boundaries.add_section(SectionInfo(
-            section_number=section_number,
-            start_sample=start_sample,
-            end_sample=end_sample,
-            section_type=section_type,
-            bpm=bpm_int
-        ))
+        # Calculate inter-onset intervals in seconds
+        iois = []
+        for i in range(1, len(onsets)):
+            ioi_seconds = (onsets[i] - onsets[i - 1]) / sample_rate
+            iois.append(ioi_seconds)
 
-    def _merge_short_sections(self, boundaries: SectionBoundaries, sample_rate: int) -> SectionBoundaries:
+        if not iois:
+            return None
+
+        # Use median IOI to estimate BPM
+        median_ioi = float(np.median(iois))
+        if median_ioi <= 0:
+            return None
+
+        bpm = 60.0 / median_ioi
+
+        # Validate BPM range
+        if self.config.min_bpm <= bpm <= self.config.max_bpm:
+            return bpm
+
+        return None
+
+    def _create_single_speaking_section(self, total_samples: int) -> SectionBoundaries:
+        """Create a single speaking section for files with no detected clicks.
+
+        Args:
+            total_samples: Total number of samples in the file
+
+        Returns:
+            SectionBoundaries with single speaking section
+        """
+        boundaries = SectionBoundaries()
+        boundaries.add_section(
+            SectionInfo(
+                section_number=1,
+                start_sample=0,
+                end_sample=total_samples,
+                section_type=SectionType.SPEAKING,
+                bpm=None,
+            )
+        )
+        return boundaries
+
+    def _merge_short_sections(
+        self, boundaries: SectionBoundaries, sample_rate: int
+    ) -> SectionBoundaries:
         """Merge sections that are shorter than minimum length.
 
         Args:
@@ -381,3 +320,48 @@ class ScipyClickAnalyzer(ClickAnalyzerProtocol):
             section.section_number = i
 
         return merged
+
+    # Keep legacy methods for protocol compatibility
+    def detect_onsets(self, audio_path: Path, sample_rate: int) -> list[int]:
+        """Detect onset positions in the audio file.
+
+        Args:
+            audio_path: Path to the audio file to analyze
+            sample_rate: Sample rate of the audio file
+
+        Returns:
+            List of onset positions in samples
+        """
+        try:
+            audio, sr = sf.read(str(audio_path))
+            if audio.ndim > 1:
+                audio = np.mean(audio, axis=1)
+            return self._detect_onsets(audio, sr)
+        except Exception as e:
+            raise AudioProcessingError(f"Failed to detect onsets: {e}") from e
+
+    def estimate_bpm(
+        self,
+        onset_samples: list[int],
+        sample_rate: int,
+        window_start_sample: int,
+        window_end_sample: int,
+    ) -> float | None:
+        """Estimate BPM for a specific sample range using onset data.
+
+        Args:
+            onset_samples: List of onset positions in samples
+            sample_rate: Sample rate of the audio
+            window_start_sample: Start of the analysis window in samples
+            window_end_sample: End of the analysis window in samples
+
+        Returns:
+            Estimated BPM as float, or None if estimation fails
+        """
+        # Filter onsets within the window
+        window_onsets = [
+            onset
+            for onset in onset_samples
+            if window_start_sample <= onset <= window_end_sample
+        ]
+        return self._estimate_bpm_from_onsets(window_onsets, sample_rate)

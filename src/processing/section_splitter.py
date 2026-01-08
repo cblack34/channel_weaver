@@ -139,6 +139,9 @@ class SectionSplitter:
             AudioProcessingError: If analysis fails
         """
         try:
+            # Check if click track has any signal
+            self._check_click_track_signal(click_track_path)
+            
             # Analyze the concatenated click track directly
             boundaries = self.analyzer.analyze(click_track_path, self.sample_rate)
 
@@ -153,6 +156,44 @@ class SectionSplitter:
 
         except Exception as e:
             raise AudioProcessingError(f"Failed to analyze click track: {e}") from e
+
+    def _check_click_track_signal(self, click_track_path: Path) -> None:
+        """Check if the click track has detectable signal.
+
+        Args:
+            click_track_path: Path to the click track file
+
+        Raises:
+            AudioProcessingError: If click track appears to be silent
+        """
+        import numpy as np
+        
+        try:
+            with sf.SoundFile(str(click_track_path)) as f:
+                # Read first 60 seconds or whole file if shorter
+                samples_to_read = min(60 * self.sample_rate, len(f))
+                data = f.read(samples_to_read)
+                
+                if data.ndim > 1:
+                    data = np.mean(data, axis=1)  # Convert to mono
+                
+                # Check for signal
+                peak_amplitude = np.max(np.abs(data))
+                rms_amplitude = np.sqrt(np.mean(data**2))
+                
+                # Count samples above threshold
+                threshold = 0.001  # -60dB
+                above_threshold = np.sum(np.abs(data) > threshold)
+                percent_above = 100 * above_threshold / len(data)
+                
+                self.console.print(f"[dim]Click track analysis: peak={peak_amplitude:.4f}, RMS={rms_amplitude:.4f}, {percent_above:.1f}% above {threshold}[/dim]")
+                
+                if peak_amplitude < 0.0001:  # Very quiet
+                    self.console.print(f"[yellow]Warning: Click track appears to be silent (peak amplitude {peak_amplitude:.6f})[/yellow]")
+                    self.console.print(f"[yellow]This may indicate the click channel ({click_track_path.name}) is not the correct channel or has no signal[/yellow]")
+                    
+        except Exception as e:
+            self.console.print(f"[yellow]Warning: Could not analyze click track signal: {e}[/yellow]")
 
     def analyze_click_track_if_enabled(
         self,
