@@ -12,6 +12,7 @@ from src.exceptions import ConfigError, AudioProcessingError, YAMLConfigError
 from src.audio.extractor import AudioExtractor
 from src.output.metadata import MutagenMetadataWriter
 from src.output import ConsoleOutputHandler
+from src.output.session_json import SessionJsonWriter
 from src.processing.section_splitter import SectionSplitter
 from src.processing.builder import TrackBuilder
 from src.config import ConfigLoader, CHANNELS, BUSES, BitDepth, ProcessingOptions
@@ -238,6 +239,17 @@ def process(
                 # Print section summary
                 output_handler = ConsoleOutputHandler(console)
                 output_handler.print_section_summary(sections)
+
+                # Write session JSON if requested
+                if processing_options.session_json_path is not None:
+                    json_writer = SessionJsonWriter()
+                    json_path = processing_options.session_json_path
+                    if json_writer.write_session_json(
+                        sections, json_path, extractor.sample_rate  # type: ignore[arg-type]
+                    ):
+                        console.print(f"[dim]Session metadata written to: {json_path}[/dim]")
+                    else:
+                        console.print(f"[yellow]Warning: Failed to write session JSON to {json_path}[/yellow]")
 
     except (YAMLConfigError, ConfigError, AudioProcessingError) as e:
         console.print(f"[red]Error:[/red] {e}")
