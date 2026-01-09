@@ -237,6 +237,8 @@ Implement an energy-based onset detection function using the following signal pr
 - Code includes comprehensive docstrings and type hints.
 - All NumPy/SciPy-specific code is isolated behind the protocol interface, enabling future alternative implementations.
 
+**Status:** Done
+
 ---
 
 ## Story 5: Implement Section Boundary Processing and Merging
@@ -416,7 +418,7 @@ Add console output functionality to display a Rich-formatted table summarizing d
 
 ## Story 10: Implement Optional JSON Session Output
 
-**Status:** Ready to start
+**Status:** Done
 
 **Description:**  
 Add functionality to write a JSON file containing detailed session metadata when the `--session-json` flag is provided.
@@ -460,7 +462,7 @@ Add functionality to write a JSON file containing detailed session metadata when
 
 ## Story 11: Add Comprehensive Error Handling and Fallbacks
 
-**Status:** Ready to start
+**Status:** Done
 
 **Description:**  
 Implement robust error handling for detection failures, invalid configurations, and edge cases, with appropriate fallbacks to maintain app stability.
@@ -532,7 +534,7 @@ Add the required signal processing libraries (NumPy, SciPy, soundfile) as projec
 
 ## Story 13: Update Documentation and Final Testing
 
-**Status:** Waiting on dependencies
+**Status:** Ready to start
 
 **Description:**  
 Update README, add comprehensive tests, and ensure all quality checks pass for the new feature.

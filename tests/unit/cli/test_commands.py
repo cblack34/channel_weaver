@@ -812,8 +812,8 @@ class TestValidation:
 
         # Setup
         channels = [
-            ChannelConfig(ch=1, name="Kick", action=ChannelAction.PROCESS),
-            ChannelConfig(ch=2, name="Snare", action=ChannelAction.PROCESS),
+            ChannelConfig(ch=1, name="Kick", action=ChannelAction.PROCESS, output_ch=None),
+            ChannelConfig(ch=2, name="Snare", action=ChannelAction.PROCESS, output_ch=None),
         ]
         section_splitting = SectionSplittingConfig(enabled=False)
         processing_options = ProcessingOptions(section_by_click=False)
@@ -832,8 +832,8 @@ class TestValidation:
 
         # Setup
         channels = [
-            ChannelConfig(ch=1, name="Kick", action=ChannelAction.PROCESS),
-            ChannelConfig(ch=2, name="Snare", action=ChannelAction.PROCESS),
+            ChannelConfig(ch=1, name="Kick", action=ChannelAction.PROCESS, output_ch=None),
+            ChannelConfig(ch=2, name="Snare", action=ChannelAction.PROCESS, output_ch=None),
         ]
         section_splitting = SectionSplittingConfig(enabled=True)
         processing_options = ProcessingOptions(section_by_click=False)
@@ -852,8 +852,8 @@ class TestValidation:
 
         # Setup
         channels = [
-            ChannelConfig(ch=1, name="Kick", action=ChannelAction.PROCESS),
-            ChannelConfig(ch=17, name="Click", action=ChannelAction.CLICK),
+            ChannelConfig(ch=1, name="Kick", action=ChannelAction.PROCESS, output_ch=None),
+            ChannelConfig(ch=17, name="Click", action=ChannelAction.CLICK, output_ch=None),
         ]
         section_splitting = SectionSplittingConfig(enabled=True)
         processing_options = ProcessingOptions(section_by_click=False)
