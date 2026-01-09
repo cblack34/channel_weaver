@@ -21,10 +21,10 @@ Create a high-quality, memory-efficient command-line tool that converts a set of
 - Fail fast with clear error messages on mismatch  
 
 ### 3.2 Output Directory  
-- Default location: a new folder named `<input_folder_name>_processed` created as a **sibling** to the input folder  
+- Default location: a new folder named `processed` created as a **sibling** to the input folder  
   - Example:  
-    Input → `C:/Recordings/My Gig 2025-11-22`  
-    Output → `C:/Recordings/My Gig 2025-11-22_processed`  
+    Input → `C:/Recordings/My Gig 2025-11-22/raw`  
+    Output → `C:/Recordings/My Gig 2025-11-22/processed`  
 - Handle conflicts: if the default folder exists, append a suffix (e.g., `_v2`, `_v3`) or timestamp to avoid overwriting  
 - User may override via CLI argument  
 - Use `pathlib` for all path operations to ensure cross-platform compatibility  
