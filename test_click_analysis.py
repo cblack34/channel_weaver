@@ -123,7 +123,7 @@ def analyze_click_track(click_path: Path, config: SectionSplittingConfig):
         channels = f.channels
         duration = len(f) / sample_rate
 
-    console.print(f"[bold]Click Track Analysis[/bold]")
+    console.print("[bold]Click Track Analysis[/bold]")
     console.print(f"File: {click_path}")
     console.print(f"Sample rate: {sample_rate} Hz")
     console.print(f"Channels: {channels}")
@@ -167,7 +167,7 @@ def analyze_click_track(click_path: Path, config: SectionSplittingConfig):
             console.print(f"Power above 1kHz: {high_freq_percent:.1f}%")
 
     # Analyze with current config
-    console.print(f"\n[bold]Analysis with current config:[/bold]")
+    console.print("\n[bold]Analysis with current config:[/bold]")
     console.print(f"Bandpass: {config.bandpass_low}-{config.bandpass_high} Hz")
     console.print(f"Peak prominence: {config.peak_prominence}")
     console.print(f"Min peak distance: {config.min_peak_distance} seconds")
@@ -176,7 +176,7 @@ def analyze_click_track(click_path: Path, config: SectionSplittingConfig):
     analyzer = ScipyClickAnalyzer(config)
     boundaries = analyzer.analyze(click_path, sample_rate)
 
-    console.print(f"\n[bold]Results:[/bold]")
+    console.print("\n[bold]Results:[/bold]")
     console.print(f"Detected {len(boundaries.sections)} sections")
 
     for section in boundaries.sections:
@@ -185,7 +185,7 @@ def analyze_click_track(click_path: Path, config: SectionSplittingConfig):
                      f"{duration_sec:.1f}s, BPM: {section.bpm}")
 
     # Test different gap thresholds
-    console.print(f"\n[bold]Testing different gap thresholds:[/bold]")
+    console.print("\n[bold]Testing different gap thresholds:[/bold]")
     
     for gap_threshold in [3.0, 5.0, 10.0, 15.0]:
         console.print(f"\n[blue]Gap threshold: {gap_threshold}s[/blue]")
