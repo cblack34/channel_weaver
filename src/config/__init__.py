@@ -4,7 +4,7 @@
 from src.config.enums import ChannelAction, BusSlot, BusType, BitDepth
 
 # Re-export models
-from src.config.models import ChannelConfig, BusConfig
+from src.config.models import ChannelConfig, BusConfig, ProcessingOptions
 
 # Re-export validators
 from src.config.validators import ChannelValidator, BusValidator
@@ -27,6 +27,7 @@ __all__ = [
     # Models
     "ChannelConfig",
     "BusConfig",
+    "ProcessingOptions",
     # Validators
     "ChannelValidator",
     "BusValidator",

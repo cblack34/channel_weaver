@@ -18,13 +18,14 @@ class ConfigSource(Protocol):
     - (Future) JSONConfigSource, TOMLConfigSource, etc.
     """
 
-    def load(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
+    def load(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any] | None, int]:
         """Load configuration data from the source.
 
         Returns:
-            Tuple of (channels_data, buses_data, schema_version) where:
+            Tuple of (channels_data, buses_data, section_splitting_data, schema_version) where:
             - channels_data: List of channel configuration dictionaries
             - buses_data: List of bus configuration dictionaries
+            - section_splitting_data: Section splitting configuration dictionary, or None if not present
             - schema_version: Schema version number (1 for built-in defaults)
 
         Raises:

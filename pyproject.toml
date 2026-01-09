@@ -4,11 +4,13 @@ version = "0.1.0"
 description = "Python CLI tool to process multitrack WAV recordings from mixing consoles. De-interleaves channels, concatenates splits, creates stereo buses, and outputs numbered DAW-ready files. Perfect for live sessions from consoles like Midas/Behringer."
 requires-python = ">=3.14"
 dependencies = [
+    "mutagen>=1.47.0",
     "numpy>=2.3.5",
     "pydantic>=2.12.4",
     "pysoundfile>=0.9.0.post1",
     "pyyaml>=6.0.3",
     "rich>=14.2.0",
+    "scipy>=1.14.0",
     "tqdm>=4.67.1",
     "typer>=0.20.0",
 ]

@@ -18,10 +18,10 @@ class DefaultConfigSource:
         """Human-readable description of the config source."""
         return "built-in defaults"
 
-    def load(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
+    def load(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any] | None, int]:
         """Load the built-in default configuration.
 
         Returns:
-            Tuple of (channels_data, buses_data, schema_version)
+            Tuple of (channels_data, buses_data, section_splitting_data, schema_version)
         """
-        return CHANNELS, BUSES, CURRENT_SCHEMA_VERSION  # type: ignore[return-value]
+        return CHANNELS, BUSES, None, CURRENT_SCHEMA_VERSION  # type: ignore[return-value]

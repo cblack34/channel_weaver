@@ -48,6 +48,26 @@
 #         LEFT: 7
 #         RIGHT: 8
 
+# SECTION SPLITTING SECTION (optional)
+# -----------------------------------
+# Configure automatic section splitting based on click track analysis:
+#
+#   enabled: (optional) Enable click-based section splitting (default: false)
+#   gap_threshold_seconds: (optional) Minimum gap between sections in seconds (default: 3.0)
+#   min_section_length_seconds: (optional) Minimum length for a section in seconds (default: 15.0)
+#   bpm_change_threshold: (optional) Minimum BPM change to trigger new section (default: 1)
+#
+# For section splitting to work, you must have a channel named "Click" with action=CLICK.
+# The click track analysis uses signal processing to detect tempo changes and section boundaries.
+#
+# Example:
+#
+#   section_splitting:
+#     enabled: true
+#     gap_threshold_seconds: 2.5
+#     min_section_length_seconds: 10.0
+#     bpm_change_threshold: 2
+
 schema_version: 1
 channels:
 - ch: 1
@@ -86,6 +106,7 @@ channels:
   name: Vox 3
 - ch: 17
   name: Click
+  action: CLICK
 - ch: 18
   name: Guide
 - ch: 19
@@ -144,3 +165,11 @@ buses:
   slots:
     LEFT: 21
     RIGHT: 22
+
+# Section splitting configuration (optional)
+# Uncomment and modify to enable click-based section splitting
+# section_splitting:
+#   enabled: true
+#   gap_threshold_seconds: 3.0
+#   min_section_length_seconds: 15.0
+#   bpm_change_threshold: 1

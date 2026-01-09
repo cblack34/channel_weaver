@@ -4,12 +4,23 @@ from pathlib import Path
 
 from rich.console import Console
 
+from typing import Protocol
+
 from src.config import ChannelConfig, BusConfig, BitDepth
 from src.processing.converters.factory import get_converter, resolve_bit_depth
 from src.processing.mono import MonoTrackWriter
 from src.processing.stereo import StereoTrackWriter
-from src.output import OutputHandler, ConsoleOutputHandler
+from src.output.protocols import OutputHandler
+from src.output import ConsoleOutputHandler
 from src.config import SegmentMap
+
+
+class TrackWriterProtocol(Protocol):
+    """Protocol for track writers."""
+
+    def write_tracks(self, channels_or_buses, segments: SegmentMap) -> None:
+        """Write tracks for the given configurations and segments."""
+        ...
 
 
 class TrackBuilder:
@@ -20,6 +31,9 @@ class TrackBuilder:
     tracks that combine left/right channels, applying filename sanitization and optional
     bit-depth conversion for the outputs.
     """
+
+    mono_writer: TrackWriterProtocol
+    stereo_writer: TrackWriterProtocol
 
     def __init__(
         self,
@@ -58,18 +72,18 @@ class TrackBuilder:
         # Use injected output handler or create default
         self._output_handler = output_handler or ConsoleOutputHandler(console)
 
-        # Initialize specialized writers
-        self.mono_writer = MonoTrackWriter(
+        # Initialize standard writers
+        self.mono_writer: TrackWriterProtocol = MonoTrackWriter(
             sample_rate=sample_rate,
             converter=converter,
             output_dir=output_dir,
-            output_handler=self._output_handler
+            output_handler=self._output_handler,
         )
-        self.stereo_writer = StereoTrackWriter(
+        self.stereo_writer: TrackWriterProtocol = StereoTrackWriter(
             sample_rate=sample_rate,
             converter=converter,
             output_dir=output_dir,
-            output_handler=self._output_handler
+            output_handler=self._output_handler,
         )
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -92,4 +106,5 @@ class TrackBuilder:
         """
         self.mono_writer.write_tracks(channels, segments)
         self.stereo_writer.write_tracks(buses, segments)
+
         self._output_handler.info(f"Tracks written to {self.output_dir}")

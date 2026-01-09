@@ -23,7 +23,7 @@ class StereoTrackWriter:
         sample_rate: int,
         converter: BitDepthConverter,
         output_dir: Path,
-        output_handler: OutputHandler
+        output_handler: OutputHandler,
     ) -> None:
         """Initialize the stereo track writer.
 

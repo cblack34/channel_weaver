@@ -2,16 +2,25 @@
 
 import logging
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated, Optional, TYPE_CHECKING
 
 import typer
 from rich.console import Console
 
+if TYPE_CHECKING:
+    from src.config import ChannelConfig, ProcessingOptions
+    from src.config.models import SectionSplittingConfig
+
 from src.constants import VERSION
-from src.exceptions import ConfigError, AudioProcessingError, YAMLConfigError
+from src.exceptions import ConfigError, AudioProcessingError, YAMLConfigError, ClickChannelNotFoundError
 from src.audio.extractor import AudioExtractor
+from src.output.metadata import MutagenMetadataWriter
+from src.output import ConsoleOutputHandler
+from src.output.session_json import SessionJsonWriter
+from src.processing.section_splitter import SectionSplitter
 from src.processing.builder import TrackBuilder
-from src.config import ConfigLoader, CHANNELS, BUSES, BitDepth
+from src.config import ConfigLoader, CHANNELS, BUSES, BitDepth, ProcessingOptions
+from src.config.enums import ChannelAction
 from src.config.resolver import ConfigResolver
 from src.cli.utils import _sanitize_path, _ensure_output_path, _determine_temp_dir
 
@@ -110,6 +119,31 @@ def process(
             help="Enable verbose debug output",
         ),
     ] = False,
+    section_by_click: Annotated[
+        bool,
+        typer.Option(
+            "--section-by-click",
+            help="Enable section splitting based on click track analysis",
+        ),
+    ] = False,
+    gap_threshold: Annotated[
+        Optional[float],
+        typer.Option(
+            "--gap-threshold",
+            min=0.1,
+            help="Minimum gap between sections in seconds (overrides config)",
+        ),
+    ] = None,
+    session_json: Annotated[
+        Optional[Path],
+        typer.Option(
+            "--session-json",
+            file_okay=True,
+            dir_okay=False,
+            resolve_path=True,
+            help="Output session metadata as JSON file",
+        ),
+    ] = None,
 ) -> None:
     """Process multitrack recordings according to configuration."""
 
@@ -159,12 +193,25 @@ def process(
                 detected_channel_count=detected_channel_count,
             )
         
-        channels, buses = config_loader.load()
+        channels, buses, section_splitting = config_loader.load()
+
+        # Create and merge processing options
+        processing_options = ProcessingOptions(
+            section_by_click=section_by_click,
+            gap_threshold_seconds=gap_threshold,
+            session_json_path=session_json,
+        )
+        channels, buses, section_splitting = config_loader.merge_processing_options(
+            channels, buses, section_splitting, processing_options
+        )
+
+        # Validate configuration early to catch issues before processing
+        _validate_processing_options(channels, section_splitting, processing_options, console)
 
         # Extract segments
         segments = extractor.extract_segments(target_bit_depth=bit_depth)
 
-        # Build tracks
+        # Build tracks (normal concatenation - this MUST complete first)
         builder = TrackBuilder(
             sample_rate=extractor.sample_rate,  # type: ignore[arg-type]
             bit_depth=bit_depth,
@@ -176,12 +223,91 @@ def process(
         )
         builder.build_tracks(channels, buses, segments)
 
+        # Section splitting happens AFTER all tracks are built
+        # This analyzes the final concatenated click track, not the raw segments
+        sections = []
+        if section_splitting.enabled:
+            section_splitter = SectionSplitter(
+                sample_rate=extractor.sample_rate,  # type: ignore[arg-type]
+                temp_dir=temp_root,
+                section_splitting=section_splitting,
+                console=console,
+            )
+
+            try:
+                # Analyze the final concatenated click track from output directory
+                sections = section_splitter.analyze_final_click_track(output_dir, channels)
+
+            except ClickChannelNotFoundError as e:
+                # No click channel configured - fall back to normal processing
+                logger.warning(f"Section splitting disabled due to configuration issue: {e}")
+                console.print(f"[yellow]Warning: {e}[/yellow]")
+                console.print("[dim]Continuing with normal long-track output...[/dim]")
+                sections = []  # Disable section splitting
+
+            if sections:
+                # Split output tracks into sections
+                section_splitter.split_output_tracks_if_enabled(output_dir, sections)
+
+                # Apply BPM metadata to section files
+                metadata_writer = MutagenMetadataWriter()
+                section_splitter.apply_metadata(output_dir, sections, metadata_writer)
+
+                # Print section summary
+                output_handler = ConsoleOutputHandler(console)
+                output_handler.print_section_summary(sections)
+
+                # Write session JSON if requested
+                if processing_options.session_json_path is not None:
+                    json_writer = SessionJsonWriter()
+                    json_path = processing_options.session_json_path
+                    if json_writer.write_session_json(
+                        sections, json_path, extractor.sample_rate  # type: ignore[arg-type]
+                    ):
+                        console.print(f"[dim]Session metadata written to: {json_path}[/dim]")
+                    else:
+                        console.print(f"[yellow]Warning: Failed to write session JSON to {json_path}[/yellow]")
+
     except (YAMLConfigError, ConfigError, AudioProcessingError) as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(code=1)
     finally:
         if not keep_temp and 'extractor' in locals():
             extractor.cleanup()
+
+
+def _validate_processing_options(
+    channels: list["ChannelConfig"],
+    section_splitting: "SectionSplittingConfig",
+    processing_options: "ProcessingOptions",
+    console: Console,
+) -> None:
+    """Validate processing options and configuration for consistency.
+
+    Args:
+        channels: Loaded channel configurations
+        section_splitting: Section splitting configuration
+        processing_options: CLI processing options
+        console: Rich console for output
+
+    Raises:
+        ClickChannelNotFoundError: If section splitting is enabled but no click channel is configured
+    """
+    # Check for click channel when section splitting is enabled
+    if section_splitting.enabled or processing_options.section_by_click:
+        click_channel = None
+        for channel in channels:
+            if channel.action == ChannelAction.CLICK:
+                click_channel = channel
+                break
+
+        if click_channel is None:
+            error_msg = (
+                "Section splitting is enabled but no click channel is configured. "
+                "Add a channel with action: CLICK to your configuration file."
+            )
+            console.print(f"[red]Configuration Error:[/red] {error_msg}")
+            raise ClickChannelNotFoundError(error_msg)
 
 
 def init_config(
@@ -281,11 +407,15 @@ def validate_config(
     try:
         # Load and parse YAML
         source = YAMLConfigSource(config_path)
-        channels_data, buses_data, schema_version = source.load()
+        channels_data, buses_data, section_splitting_data, schema_version = source.load()
         
         console.print(f"[dim]Schema version: {schema_version}[/dim]")
         console.print(f"[dim]Channels defined: {len(channels_data)}[/dim]")
         console.print(f"[dim]Buses defined: {len(buses_data)}[/dim]")
+        if section_splitting_data:
+            console.print("[dim]Section splitting: enabled[/dim]")
+        else:
+            console.print("[dim]Section splitting: disabled[/dim]")
         
         # Full validation through ConfigLoader
         config_loader = ConfigLoader(
@@ -293,11 +423,12 @@ def validate_config(
             buses_data,  # type: ignore[arg-type]
             detected_channel_count=channel_count,
         )
-        channels, buses = config_loader.load()
+        channels, buses, section_splitting = config_loader.load()
         
         console.print("\n[green]✓ Configuration is valid[/green]")
         console.print(f"  Channels: {len(channels)}")
         console.print(f"  Buses: {len(buses)}")
+        console.print(f"  Section splitting: {'enabled' if section_splitting.enabled else 'disabled'}")
         
         if channel_count:
             console.print(f"  Validated against {channel_count} channels")

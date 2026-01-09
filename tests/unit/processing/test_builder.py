@@ -73,13 +73,13 @@ class TestTrackBuilder:
             sample_rate=44100,
             converter=mock_converter,
             output_dir=tmp_path / "output",
-            output_handler=mock_output_handler
+            output_handler=mock_output_handler,
         )
         mock_stereo_class.assert_called_once_with(
             sample_rate=44100,
             converter=mock_converter,
             output_dir=tmp_path / "output",
-            output_handler=mock_output_handler
+            output_handler=mock_output_handler,
         )
 
     def test_init_without_output_handler_creates_default(

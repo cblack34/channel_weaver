@@ -1284,6 +1284,557 @@ class TestAudioValidator:
 
 ---
 
+### 2.5 Click Feature Tests
+
+#### `tests/unit/audio/click/test_analyzer.py`
+
+```python
+"""Unit tests for ScipyClickAnalyzer."""
+
+from __future__ import annotations
+
+import numpy as np
+import pytest
+from scipy import signal
+
+from src.audio.click.analyzer import ScipyClickAnalyzer
+from src.config.models import SectionSplittingConfig
+
+
+class TestScipyClickAnalyzer:
+    """Tests for ScipyClickAnalyzer."""
+
+    @pytest.fixture
+    def config(self) -> SectionSplittingConfig:
+        """Create test configuration."""
+        return SectionSplittingConfig(
+            enabled=True,
+            gap_threshold_seconds=3.0,
+            min_section_length_seconds=15.0,
+            bpm_change_threshold=1,
+        )
+
+    @pytest.fixture
+    def analyzer(self, config: SectionSplittingConfig) -> ScipyClickAnalyzer:
+        """Create analyzer instance."""
+        return ScipyClickAnalyzer(config)
+
+    def test_analyze_synthetic_click_track_120bpm(
+        self,
+        analyzer: ScipyClickAnalyzer,
+        sample_rate: int = 44100,
+    ) -> None:
+        """Test analysis of synthetic 120 BPM click track."""
+        # Generate 10 seconds of 120 BPM clicks
+        duration_sec = 10
+        bpm = 120
+        samples = np.zeros(int(sample_rate * duration_sec))
+        
+        # Create click pattern (every 0.5 seconds at 120 BPM)
+        click_interval = int(sample_rate * 60 / bpm)
+        for i in range(0, len(samples), click_interval):
+            # Simple click: short burst of high frequency
+            click_samples = int(sample_rate * 0.01)  # 10ms click
+            if i + click_samples < len(samples):
+                # High-frequency burst
+                t = np.linspace(0, 0.01, click_samples)
+                click_wave = np.sin(2 * np.pi * 2000 * t) * np.exp(-t * 100)
+                samples[i:i + click_samples] += click_wave
+        
+        # Mock soundfile to return our synthetic audio
+        import soundfile as sf
+        with pytest.mock.patch.object(sf, 'blocks') as mock_blocks:
+            mock_blocks.return_value = iter([samples.reshape(-1, 1)])
+            
+            sections = analyzer.analyze("dummy.wav", sample_rate)
+            
+            assert len(sections) == 1
+            assert sections[0].bpm == pytest.approx(120, abs=2)
+            assert sections[0].section_number == 1
+
+    def test_analyze_no_clicks_returns_single_section(
+        self,
+        analyzer: ScipyClickAnalyzer,
+        sample_rate: int = 44100,
+    ) -> None:
+        """Test that silent audio returns single section with bpm=None."""
+        # Generate silent audio
+        samples = np.zeros((sample_rate * 5, 1))  # 5 seconds
+        
+        import soundfile as sf
+        with pytest.mock.patch.object(sf, 'blocks') as mock_blocks:
+            mock_blocks.return_value = iter([samples])
+            
+            sections = analyzer.analyze("silent.wav", sample_rate)
+            
+            assert len(sections) == 1
+            assert sections[0].bpm is None
+            assert sections[0].section_number == 1
+
+    def test_analyze_multiple_tempo_changes(
+        self,
+        analyzer: ScipyClickAnalyzer,
+        sample_rate: int = 44100,
+    ) -> None:
+        """Test detection of tempo changes within a track."""
+        # Create sections with different BPMs separated by gaps
+        sections_data = []
+        
+        # Section 1: 100 BPM for 5 seconds
+        duration1 = 5
+        bpm1 = 100
+        samples1 = np.zeros(int(sample_rate * duration1))
+        click_interval1 = int(sample_rate * 60 / bpm1)
+        for i in range(0, len(samples1), click_interval1):
+            click_samples = int(sample_rate * 0.01)
+            if i + click_samples < len(samples1):
+                t = np.linspace(0, 0.01, click_samples)
+                click_wave = np.sin(2 * np.pi * 2000 * t) * np.exp(-t * 100)
+                samples1[i:i + click_samples] += click_wave
+        
+        # Gap: 4 seconds of silence (exceeds gap_threshold)
+        gap_samples = np.zeros(int(sample_rate * 4))
+        
+        # Section 2: 140 BPM for 5 seconds  
+        duration2 = 5
+        bpm2 = 140
+        samples2 = np.zeros(int(sample_rate * duration2))
+        click_interval2 = int(sample_rate * 60 / bpm2)
+        for i in range(0, len(samples2), click_interval2):
+            click_samples = int(sample_rate * 0.01)
+            if i + click_samples < len(samples2):
+                t = np.linspace(0, 0.01, click_samples)
+                click_wave = np.sin(2 * np.pi * 2000 * t) * np.exp(-t * 100)
+                samples2[i:i + click_samples] += click_wave
+        
+        # Combine: section1 + gap + section2
+        combined = np.vstack([samples1.reshape(-1, 1), 
+                            gap_samples.reshape(-1, 1), 
+                            samples2.reshape(-1, 1)])
+        
+        import soundfile as sf
+        with pytest.mock.patch.object(sf, 'blocks') as mock_blocks:
+            mock_blocks.return_value = iter([combined])
+            
+            sections = analyzer.analyze("multi_tempo.wav", sample_rate)
+            
+            assert len(sections) >= 2  # At least two sections detected
+            # First section should be ~100 BPM
+            assert sections[0].bpm == pytest.approx(100, abs=5)
+            # Later sections should have different BPM if detected
+```
+
+#### `tests/unit/audio/click/test_models.py`
+
+```python
+"""Unit tests for click analysis data models."""
+
+from __future__ import annotations
+
+import pytest
+from pydantic import ValidationError
+
+from src.audio.click.models import SectionInfo
+from src.audio.click.enums import SectionType
+
+
+class TestSectionInfo:
+    """Tests for SectionInfo Pydantic model."""
+
+    def test_create_section_info_minimal(self) -> None:
+        """Test creating SectionInfo with minimal required fields."""
+        section = SectionInfo(
+            section_number=1,
+            start_sample=0,
+            end_sample=441000,  # 10 seconds at 44.1kHz
+            bpm=120,
+        )
+        
+        assert section.section_number == 1
+        assert section.start_sample == 0
+        assert section.end_sample == 441000
+        assert section.bpm == 120
+        assert section.section_type == SectionType.SONG  # default
+
+    def test_create_section_info_with_type(self) -> None:
+        """Test creating SectionInfo with explicit section type."""
+        section = SectionInfo(
+            section_number=2,
+            start_sample=441000,
+            end_sample=882000,
+            bpm=140,
+            section_type=SectionType.BRIDGE,
+        )
+        
+        assert section.section_type == SectionType.BRIDGE
+
+    def test_section_info_validation_negative_bpm(self) -> None:
+        """Test that negative BPM values are rejected."""
+        with pytest.raises(ValidationError):
+            SectionInfo(
+                section_number=1,
+                start_sample=0,
+                end_sample=441000,
+                bpm=-10,  # Invalid
+            )
+
+    def test_section_info_bpm_none_allowed(self) -> None:
+        """Test that bpm=None is allowed for sections without detectable tempo."""
+        section = SectionInfo(
+            section_number=1,
+            start_sample=0,
+            end_sample=441000,
+            bpm=None,  # Valid for silent sections
+        )
+        
+        assert section.bpm is None
+
+    def test_section_info_serialization(self) -> None:
+        """Test JSON serialization/deserialization."""
+        import json
+        
+        section = SectionInfo(
+            section_number=1,
+            start_sample=0,
+            end_sample=441000,
+            bpm=120,
+            section_type=SectionType.VERSE,
+        )
+        
+        # Serialize to dict
+        data = section.model_dump()
+        assert data["section_number"] == 1
+        assert data["bpm"] == 120
+        assert data["section_type"] == "VERSE"
+        
+        # Deserialize from dict
+        section2 = SectionInfo.model_validate(data)
+        assert section2 == section
+```
+
+#### `tests/unit/audio/click/test_protocols.py`
+
+```python
+"""Unit tests for click analysis protocols."""
+
+from __future__ import annotations
+
+from typing import Protocol
+from unittest.mock import Mock
+
+import pytest
+
+from src.audio.click.protocols import ClickAnalyzerProtocol
+
+
+class TestClickAnalyzerProtocol:
+    """Tests for ClickAnalyzerProtocol interface."""
+
+    def test_protocol_definition(self) -> None:
+        """Test that ClickAnalyzerProtocol is properly defined."""
+        # This is a compile-time check - if the protocol is malformed,
+        # mypy will catch it during type checking
+        
+        # Create a mock implementation
+        class MockAnalyzer:
+            def analyze(self, audio_path, sample_rate):
+                return []
+        
+        analyzer = MockAnalyzer()
+        
+        # Verify it matches the protocol (runtime check)
+        assert hasattr(analyzer, 'analyze')
+        assert callable(getattr(analyzer, 'analyze'))
+
+    def test_protocol_inheritance(self) -> None:
+        """Test that concrete implementations properly inherit from protocol."""
+        from src.audio.click.analyzer import ScipyClickAnalyzer
+        from src.config.models import SectionSplittingConfig
+        
+        # Create instance
+        config = SectionSplittingConfig()
+        analyzer = ScipyClickAnalyzer(config)
+        
+        # Verify it implements the protocol
+        assert isinstance(analyzer, ClickAnalyzerProtocol)
+        
+        # Verify method exists and is callable
+        assert hasattr(analyzer, 'analyze')
+        assert callable(analyzer.analyze)
+```
+
+#### `tests/unit/output/test_session_json.py`
+
+```python
+"""Unit tests for SessionJsonWriter."""
+
+from __future__ import annotations
+
+from pathlib import Path
+import json
+import pytest
+
+from src.output.session_json import SessionJsonWriter
+from src.audio.click.models import SectionInfo
+from src.audio.click.enums import SectionType
+
+
+class TestSessionJsonWriter:
+    """Tests for SessionJsonWriter."""
+
+    @pytest.fixture
+    def writer(self, tmp_path: Path) -> SessionJsonWriter:
+        """Create SessionJsonWriter instance."""
+        return SessionJsonWriter()
+
+    @pytest.fixture
+    def sample_sections(self) -> list[SectionInfo]:
+        """Create sample section data for testing."""
+        return [
+            SectionInfo(
+                section_number=1,
+                start_sample=0,
+                end_sample=441000,  # 10 seconds
+                bpm=120,
+                section_type=SectionType.VERSE,
+            ),
+            SectionInfo(
+                section_number=2, 
+                start_sample=441000,
+                end_sample=882000,  # 20 seconds total
+                bpm=140,
+                section_type=SectionType.CHORUS,
+            ),
+        ]
+
+    def test_write_session_json(
+        self,
+        writer: SessionJsonWriter,
+        tmp_path: Path,
+        sample_sections: list[SectionInfo],
+    ) -> None:
+        """Test writing session JSON with section data."""
+        output_file = tmp_path / "session.json"
+        
+        writer.write_session_json(
+            sections=sample_sections,
+            output_path=output_file,
+            sample_rate=44100,
+            input_files=["track1.wav", "track2.wav"],
+        )
+        
+        # Verify file was created
+        assert output_file.exists()
+        
+        # Verify JSON content
+        with open(output_file) as f:
+            data = json.load(f)
+        
+        assert "sections" in data
+        assert "metadata" in data
+        assert len(data["sections"]) == 2
+        
+        # Check first section
+        section1 = data["sections"][0]
+        assert section1["section"] == "section_01"
+        assert section1["start_time"] == 0.0
+        assert section1["duration"] == 10.0
+        assert section1["bpm"] == 120
+        assert section1["type"] == "VERSE"
+        
+        # Check metadata
+        assert data["metadata"]["sample_rate"] == 44100
+        assert data["metadata"]["input_files"] == ["track1.wav", "track2.wav"]
+
+    def test_write_session_json_empty_sections(
+        self,
+        writer: SessionJsonWriter,
+        tmp_path: Path,
+    ) -> None:
+        """Test writing session JSON with no sections."""
+        output_file = tmp_path / "empty_session.json"
+        
+        writer.write_session_json(
+            sections=[],
+            output_path=output_file,
+            sample_rate=48000,
+            input_files=["single_track.wav"],
+        )
+        
+        assert output_file.exists()
+        
+        with open(output_file) as f:
+            data = json.load(f)
+        
+        assert data["sections"] == []
+        assert data["metadata"]["sample_rate"] == 48000
+```
+
+#### `tests/unit/output/test_metadata.py`
+
+```python
+"""Unit tests for metadata embedding."""
+
+from __future__ import annotations
+
+from pathlib import Path
+import tempfile
+import pytest
+
+from src.output.metadata import MutagenMetadataWriter
+
+
+class TestMutagenMetadataWriter:
+    """Tests for MutagenMetadataWriter."""
+
+    @pytest.fixture
+    def writer(self) -> MutagenMetadataWriter:
+        """Create metadata writer instance."""
+        return MutagenMetadataWriter()
+
+    @pytest.fixture
+    def temp_wav_file(self) -> Path:
+        """Create a temporary WAV file for testing."""
+        # Create minimal WAV file using soundfile
+        import soundfile as sf
+        import numpy as np
+        
+        samples = np.random.randn(44100, 2).astype(np.float32)  # 1 second stereo
+        
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+            sf.write(f.name, samples, 44100)
+            yield Path(f.name)
+        
+        # Cleanup
+        Path(f.name).unlink(missing_ok=True)
+
+    def test_embed_bpm_metadata(
+        self,
+        writer: MutagenMetadataWriter,
+        temp_wav_file: Path,
+    ) -> None:
+        """Test embedding BPM metadata in WAV file."""
+        test_bpm = 128
+        
+        # Embed BPM
+        writer.embed_bpm(temp_wav_file, test_bpm)
+        
+        # Verify BPM was embedded
+        read_bpm = writer.read_bpm(temp_wav_file)
+        assert read_bpm == test_bpm
+
+    def test_read_bpm_no_metadata(self, temp_wav_file: Path) -> None:
+        """Test reading BPM from file without metadata."""
+        writer = MutagenMetadataWriter()
+        
+        bpm = writer.read_bpm(temp_wav_file)
+        assert bpm is None
+
+    def test_embed_bpm_overwrites_existing(
+        self,
+        writer: MutagenMetadataWriter,
+        temp_wav_file: Path,
+    ) -> None:
+        """Test that embedding BPM overwrites existing value."""
+        # Embed initial BPM
+        writer.embed_bpm(temp_wav_file, 100)
+        assert writer.read_bpm(temp_wav_file) == 100
+        
+        # Embed new BPM
+        writer.embed_bpm(temp_wav_file, 140)
+        assert writer.read_bpm(temp_wav_file) == 140
+```
+
+#### Integration Tests for Click Feature
+
+```python
+"""Integration tests for click-based section splitting."""
+
+from __future__ import annotations
+
+from pathlib import Path
+import json
+import pytest
+
+from tests.conftest import run_cli_command
+
+
+class TestClickFeatureIntegration:
+    """Integration tests for the complete click feature workflow."""
+
+    def test_full_section_splitting_workflow(
+        self,
+        tmp_path: Path,
+        sample_multitrack_project: Path,
+    ) -> None:
+        """Test complete workflow: input → processing → sectioned output."""
+        output_dir = tmp_path / "output"
+        
+        # Run processing with section splitting
+        result = run_cli_command([
+            "process",
+            str(sample_multitrack_project),
+            "--output", str(output_dir),
+            "--section-by-click",
+            "--session-json", str(output_dir / "session.json"),
+        ])
+        
+        assert result.returncode == 0
+        
+        # Verify output structure
+        assert output_dir.exists()
+        
+        # Should have section directories
+        section_dirs = [d for d in output_dir.iterdir() if d.is_dir() and d.name.startswith("section_")]
+        assert len(section_dirs) > 0
+        
+        # Each section should have audio files
+        for section_dir in section_dirs:
+            wav_files = list(section_dir.glob("*.wav"))
+            assert len(wav_files) > 0
+            
+            # Check for BPM metadata in files
+            # (This would require additional audio analysis tools)
+        
+        # Check session JSON
+        session_file = output_dir / "session.json"
+        assert session_file.exists()
+        
+        with open(session_file) as f:
+            session_data = json.load(f)
+        
+        assert "sections" in session_data
+        assert "metadata" in session_data
+        assert len(session_data["sections"]) > 0
+
+    def test_section_splitting_disabled_by_default(
+        self,
+        tmp_path: Path,
+        sample_multitrack_project: Path,
+    ) -> None:
+        """Test that section splitting is disabled by default."""
+        output_dir = tmp_path / "output_no_sections"
+        
+        # Run without --section-by-click
+        result = run_cli_command([
+            "process",
+            str(sample_multitrack_project),
+            "--output", str(output_dir),
+        ])
+        
+        assert result.returncode == 0
+        
+        # Should NOT have section directories
+        section_dirs = [d for d in output_dir.iterdir() if d.is_dir() and d.name.startswith("section_")]
+        assert len(section_dirs) == 0
+        
+        # Should have direct WAV files
+        wav_files = list(output_dir.glob("*.wav"))
+        assert len(wav_files) > 0
+```
+
+---
+
 ### 3. Processing Module Tests
 
 #### `tests/unit/processing/conftest.py`

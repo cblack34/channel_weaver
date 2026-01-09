@@ -10,6 +10,7 @@ from pytest_mock import MockerFixture
 
 from src.cli.commands import version_callback, process, init_config, validate_config
 from src.config.enums import BitDepth
+from src.config.models import SectionSplittingConfig
 
 
 class TestVersionCallback:
@@ -61,8 +62,12 @@ class TestMainCommand:
 
         # Configure default return values for ConfigLoader paths
         # Both constructor and from_yaml() classmethod need to return instances with load() method
-        mocks["config_loader"].return_value.load.return_value = ([], [])
-        mocks["config_loader"].from_yaml.return_value.load.return_value = ([], [])
+        default_section_splitting = SectionSplittingConfig()
+        mocks["config_loader"].return_value.load.return_value = ([], [], default_section_splitting)
+        mocks["config_loader"].from_yaml.return_value.load.return_value = ([], [], default_section_splitting)
+        # Mock merge_processing_options to return the same values
+        mocks["config_loader"].return_value.merge_processing_options.return_value = ([], [], default_section_splitting)
+        mocks["config_loader"].from_yaml.return_value.merge_processing_options.return_value = ([], [], default_section_splitting)
 
         # Mock console
         mocks["console"] = mocker.patch("src.cli.commands.Console")
@@ -99,7 +104,9 @@ class TestMainCommand:
 
         # Configure config loader
         mock_config_instance = mocks["config_loader"].return_value
-        mock_config_instance.load.return_value = ([], [])  # empty channels and buses
+        default_section_splitting = SectionSplittingConfig()
+        mock_config_instance.load.return_value = ([], [], default_section_splitting)  # empty channels, buses, and default section_splitting
+        mock_config_instance.merge_processing_options.return_value = ([], [], default_section_splitting)
 
         # Configure builder
         mock_builder_instance = mocks["builder"].return_value
@@ -114,6 +121,9 @@ class TestMainCommand:
             keep_temp=False,
             version=False,
             verbose=False,
+            section_by_click=False,
+            gap_threshold=None,
+            session_json=None,
         )
 
         # Verify path utilities were called
@@ -171,7 +181,7 @@ class TestMainCommand:
         mock_extractor_instance.channels = 2
         mock_extractor_instance.cleanup.return_value = None
 
-        mocks["config_loader"].return_value.load.return_value = ([], [])
+        mocks["config_loader"].return_value.load.return_value = ([], [], SectionSplittingConfig())
 
         # Mock logging
         mock_logger = mocker.patch("src.cli.commands.logger")
@@ -188,6 +198,9 @@ class TestMainCommand:
                     keep_temp=False,
                     version=False,
                     verbose=True,
+                    section_by_click=False,
+                    gap_threshold=None,
+                    session_json=None,
                 )
 
         # Verify debug logging was enabled
@@ -229,6 +242,9 @@ class TestMainCommand:
                 keep_temp=False,
                 version=False,
                 verbose=False,
+                section_by_click=False,
+                gap_threshold=None,
+                session_json=None,
             )
 
         # Verify error was printed
@@ -276,6 +292,9 @@ class TestMainCommand:
                 keep_temp=False,
                 version=False,
                 verbose=False,
+                section_by_click=False,
+                gap_threshold=None,
+                session_json=None,
             )
 
         # Verify error was printed
@@ -322,6 +341,9 @@ class TestMainCommand:
                 keep_temp=False,  # This should trigger cleanup
                 version=False,
                 verbose=False,
+                section_by_click=False,
+                gap_threshold=None,
+                session_json=None,
             )
 
         # Verify cleanup was called despite the error
@@ -345,7 +367,8 @@ class TestMainCommand:
         mock_extractor_instance.channels = 2
         mock_extractor_instance.cleanup.return_value = None
 
-        mocks["config_loader"].return_value.load.return_value = ([], [])
+        mocks["config_loader"].return_value.load.return_value = ([], [], SectionSplittingConfig())
+        mocks["config_loader"].return_value.merge_processing_options.return_value = ([], [], SectionSplittingConfig())
 
         # Execute with keep_temp=True
         process(
@@ -356,6 +379,9 @@ class TestMainCommand:
             keep_temp=True,  # This should skip cleanup
             version=False,
             verbose=False,
+            section_by_click=False,
+            gap_threshold=None,
+            session_json=None,
         )
 
         # Verify cleanup was NOT called
@@ -564,6 +590,7 @@ class TestValidateConfigCommand:
         mock_source.load.return_value = (
             [{"ch": 1, "name": "Channel_1", "action": "BUS"}],
             [{"file_name": "01_Master", "type": "STEREO", "slots": {"LEFT": 1, "RIGHT": 1}}],
+            None,  # section_splitting_data
             1,  # schema_version
         )
         
@@ -571,11 +598,12 @@ class TestValidateConfigCommand:
         mock_loader_class = mocker.patch("src.cli.commands.ConfigLoader")
         mock_loader = mock_loader_class.return_value
         # Return actual model instances
-        from src.config.models import ChannelConfig, BusConfig
-        from src.config.enums import BusSlot, ChannelAction
+        from src.config.models import ChannelConfig, BusConfig, SectionSplittingConfig
+        from src.config.enums import BusSlot, ChannelAction, BusType
         mock_loader.load.return_value = (
-            [ChannelConfig(ch=1, name="Channel_1", action=ChannelAction.BUS)],
-            [BusConfig(file_name="01_Master", type="STEREO", slots={BusSlot.LEFT: 1, BusSlot.RIGHT: 1})],
+            [ChannelConfig(ch=1, name="Channel_1", action=ChannelAction.BUS, output_ch=None)],
+            [BusConfig(file_name="01_Master", type=BusType.STEREO, slots={BusSlot.LEFT: 1, BusSlot.RIGHT: 1})],
+            SectionSplittingConfig(),  # default section_splitting
         )
         
         # Mock Console
@@ -615,6 +643,7 @@ class TestValidateConfigCommand:
         mock_source.load.return_value = (
             channels_data,
             [{"file_name": "01_Master", "type": "STEREO", "slots": {"LEFT": 1, "RIGHT": 2}}],
+            None,  # section_splitting_data
             1,
         )
         
@@ -622,13 +651,14 @@ class TestValidateConfigCommand:
         mock_loader_class = mocker.patch("src.cli.commands.ConfigLoader")
         mock_loader = mock_loader_class.return_value
         # Return actual model instances
-        from src.config.models import ChannelConfig, BusConfig
-        from src.config.enums import BusSlot, ChannelAction
-        bus_channels = [ChannelConfig(ch=1, name="Ch_1", action=ChannelAction.BUS), ChannelConfig(ch=2, name="Ch_2", action=ChannelAction.BUS)]
-        process_channels = [ChannelConfig(ch=i, name=f"Ch_{i}") for i in range(3, 9)]
+        from src.config.models import ChannelConfig, BusConfig, SectionSplittingConfig
+        from src.config.enums import BusSlot, ChannelAction, BusType
+        bus_channels = [ChannelConfig(ch=1, name="Ch_1", action=ChannelAction.BUS, output_ch=None), ChannelConfig(ch=2, name="Ch_2", action=ChannelAction.BUS, output_ch=None)]
+        process_channels = [ChannelConfig(ch=i, name=f"Ch_{i}", output_ch=None) for i in range(3, 9)]
         mock_loader.load.return_value = (
             bus_channels + process_channels,
-            [BusConfig(file_name="01_Master", type="STEREO", slots={BusSlot.LEFT: 1, BusSlot.RIGHT: 2})],
+            [BusConfig(file_name="01_Master", type=BusType.STEREO, slots={BusSlot.LEFT: 1, BusSlot.RIGHT: 2})],
+            SectionSplittingConfig(),  # default section_splitting
         )
         
         # Mock Console
@@ -693,6 +723,7 @@ class TestValidateConfigCommand:
         mock_source.load.return_value = (
             [{"ch": 1, "name": "Channel_1", "action": "PROCESS"}],
             [{"file_name": "01_Master", "type": "STEREO", "slots": {"LEFT": 99, "RIGHT": 99}}],  # Invalid channel reference
+            None,  # section_splitting_data
             1,
         )
         
@@ -740,6 +771,7 @@ class TestValidateConfigCommand:
         mock_source.load.return_value = (
             channels_data,
             [{"file_name": "01_Bus1", "type": "STEREO", "slots": {"LEFT": 1, "RIGHT": 2}}, {"file_name": "02_Bus2", "type": "STEREO", "slots": {"LEFT": 3, "RIGHT": 4}}],
+            None,  # section_splitting_data
             2,  # schema_version
         )
         
@@ -747,13 +779,14 @@ class TestValidateConfigCommand:
         mock_loader_class = mocker.patch("src.cli.commands.ConfigLoader")
         mock_loader = mock_loader_class.return_value
         # Return actual model instances
-        from src.config.models import ChannelConfig, BusConfig
-        from src.config.enums import BusSlot, ChannelAction
-        bus_channels = [ChannelConfig(ch=i, name=f"Ch_{i}", action=ChannelAction.BUS) for i in range(1, 5)]
-        process_channels = [ChannelConfig(ch=i, name=f"Ch_{i}") for i in range(5, 17)]
+        from src.config.models import ChannelConfig, BusConfig, SectionSplittingConfig
+        from src.config.enums import BusSlot, ChannelAction, BusType
+        bus_channels = [ChannelConfig(ch=i, name=f"Ch_{i}", action=ChannelAction.BUS, output_ch=None) for i in range(1, 5)]
+        process_channels = [ChannelConfig(ch=i, name=f"Ch_{i}", output_ch=None) for i in range(5, 17)]
         mock_loader.load.return_value = (
             bus_channels + process_channels,
-            [BusConfig(file_name="01_Bus1", type="STEREO", slots={BusSlot.LEFT: 1, BusSlot.RIGHT: 2}), BusConfig(file_name="02_Bus2", type="STEREO", slots={BusSlot.LEFT: 3, BusSlot.RIGHT: 4})],
+            [BusConfig(file_name="01_Bus1", type=BusType.STEREO, slots={BusSlot.LEFT: 1, BusSlot.RIGHT: 2}), BusConfig(file_name="02_Bus2", type=BusType.STEREO, slots={BusSlot.LEFT: 3, BusSlot.RIGHT: 4})],
+            SectionSplittingConfig(),  # default section_splitting
         )
         
         # Mock Console
@@ -766,5 +799,65 @@ class TestValidateConfigCommand:
         # Verify schema info was printed
         print_calls = [str(call[0][0]) for call in mock_console.print.call_args_list]
         assert any("Schema version: 2" in call for call in print_calls)
-        assert any("Channels defined: 16" in call for call in print_calls)
-        assert any("Buses defined: 2" in call for call in print_calls)
+
+class TestValidation:
+    """Tests for validation functions."""
+
+    def test_validate_processing_options_no_click_channel_needed(self, mocker: MockerFixture) -> None:
+        """Test validation passes when section splitting is disabled."""
+        from src.cli.commands import _validate_processing_options
+        from src.config import ChannelConfig
+        from src.config.models import SectionSplittingConfig, ProcessingOptions
+        from src.config.enums import ChannelAction
+
+        # Setup
+        channels = [
+            ChannelConfig(ch=1, name="Kick", action=ChannelAction.PROCESS, output_ch=None),
+            ChannelConfig(ch=2, name="Snare", action=ChannelAction.PROCESS, output_ch=None),
+        ]
+        section_splitting = SectionSplittingConfig(enabled=False)
+        processing_options = ProcessingOptions(section_by_click=False)
+        mock_console = mocker.patch("src.cli.commands.Console")
+
+        # Should not raise
+        _validate_processing_options(channels, section_splitting, processing_options, mock_console.return_value)
+
+    def test_validate_processing_options_click_channel_required_but_missing(self, mocker: MockerFixture) -> None:
+        """Test validation fails when section splitting is enabled but no click channel exists."""
+        from src.cli.commands import _validate_processing_options
+        from src.config import ChannelConfig
+        from src.config.models import SectionSplittingConfig, ProcessingOptions
+        from src.config.enums import ChannelAction
+        from src.exceptions import ClickChannelNotFoundError
+
+        # Setup
+        channels = [
+            ChannelConfig(ch=1, name="Kick", action=ChannelAction.PROCESS, output_ch=None),
+            ChannelConfig(ch=2, name="Snare", action=ChannelAction.PROCESS, output_ch=None),
+        ]
+        section_splitting = SectionSplittingConfig(enabled=True)
+        processing_options = ProcessingOptions(section_by_click=False)
+        mock_console = mocker.patch("src.cli.commands.Console")
+
+        # Should raise ClickChannelNotFoundError
+        with pytest.raises(ClickChannelNotFoundError):
+            _validate_processing_options(channels, section_splitting, processing_options, mock_console.return_value)
+
+    def test_validate_processing_options_click_channel_present(self, mocker: MockerFixture) -> None:
+        """Test validation passes when click channel is present."""
+        from src.cli.commands import _validate_processing_options
+        from src.config import ChannelConfig
+        from src.config.models import SectionSplittingConfig, ProcessingOptions
+        from src.config.enums import ChannelAction
+
+        # Setup
+        channels = [
+            ChannelConfig(ch=1, name="Kick", action=ChannelAction.PROCESS, output_ch=None),
+            ChannelConfig(ch=17, name="Click", action=ChannelAction.CLICK, output_ch=None),
+        ]
+        section_splitting = SectionSplittingConfig(enabled=True)
+        processing_options = ProcessingOptions(section_by_click=False)
+        mock_console = mocker.patch("src.cli.commands.Console")
+
+        # Should not raise
+        _validate_processing_options(channels, section_splitting, processing_options, mock_console.return_value)

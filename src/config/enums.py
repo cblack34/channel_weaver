@@ -9,6 +9,7 @@ class ChannelAction(Enum):
     PROCESS = auto()
     BUS = auto()
     SKIP = auto()
+    CLICK = auto()
 
 
 class BusSlot(Enum):
